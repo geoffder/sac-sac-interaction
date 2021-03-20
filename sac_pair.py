@@ -14,7 +14,6 @@ from utils import *
 class Sac:
     def __init__(self, name, forward=True, seed=0, params=None):
         self.set_default_params()
-        self.set_hoc_params()
         if params is not None:
             self.update_params(params)
         self.name = name
@@ -23,6 +22,7 @@ class Sac:
         self.rand = h.Random(seed)
         self.nz_seed = 1  # noise seed for HHst
 
+        self.calc_xy_locs()
         self.create_neuron()  # builds and connects soma and dendrite
 
     def set_default_params(self):
@@ -36,7 +36,7 @@ class Sac:
 
         # dendrite physical properties
         self.dend_nseg = 25
-        self.seg_step = 1 / self.dend_n_seg
+        self.seg_step = 1 / self.dend_nseg
         self.dend_diam = .5
         self.dend_l = 150
         self.term_l = 10
@@ -46,6 +46,9 @@ class Sac:
         self.soma_na = .0  # [S/cm2]
         self.soma_k = .035  # [S/cm2]
         self.soma_km = .003  # [S/cm2]
+
+        self.dend_cat = .0003
+        self.dend_cal = .0003
         self.soma_gleak_hh = .0001667  # [S/cm2]
         self.soma_eleak_hh = -60.0  # [mV]
         self.soma_gleak_pas = .0001667  # [S/cm2]
@@ -65,6 +68,7 @@ class Sac:
         self.soma_nz_factor = .1
 
         self.bp_jitter = 0
+        self.bp_locs = {"prox": [5], "dist": [25, 45, 65]}
         self.bp_props = {
             "prox":
                 {
@@ -83,6 +87,8 @@ class Sac:
         }
 
         self.gaba_props = {
+            "loc": 15,  # distance from soma [um]
+            "thresh": -50,  # pre-synaptic release threshold
             "tau1": .5,  # inhibitory conductance rise tau [ms]
             "tau2": 60,  # inhibitory conductance decay tau [ms]
             "rev": -70,  # inhibitory reversal potential [mV]
@@ -98,24 +104,16 @@ class Sac:
     def get_params_dict(self):
         params = self.__dict__.copy()
         # remove the non-param entries (model objects)
-        for key in ["soma", "dend", "syns"]:
+        for key in ["soma", "dend", "term", "bps", "rand"]:
             params.pop(key)
         return params
-
-    def set_hoc_params(self):
-        """Set hoc NEURON environment model run parameters."""
-        h.tstop = self.tstop
-        h.steps_per_ms = self.steps_per_ms
-        h.dt = self.dt
-        h.v_init = self.v_init
-        h.celsius = self.celsius
 
     def create_soma(self):
         """Build and set membrane properties of soma compartment"""
         soma = nrn_section("soma_%s" % self.name)
-        soma.L = self.soma_L
+        soma.L = self.soma_l
         soma.diam = self.soma_diam
-        soma.nseg = self.soma_n_seg
+        soma.nseg = self.soma_nseg
         soma.Ra = self.soma_ra
 
         soma.insert('HHst')
@@ -132,15 +130,15 @@ class Sac:
         dend = nrn_section("dend_%s" % (self.name))
         term = nrn_section("term_%s" % (self.name))
         for s in [dend, term]:
-            s.nseg = self.n_seg
+            s.nseg = self.dend_nseg
             s.Ra = self.dend_ra
             s.diam = self.dend_diam
             s.insert('HHst')
-            s.gnabar_hhst = self.dend_na
-            s.gkbar_hhst = self.dend_k
-            s.gkmbar_hhst = self.dend_km
-            s.gtbar_hhst = self.dend_cat
-            s.glbar_hhst = self.dend_cal
+            s.gnabar_HHst = self.dend_na
+            s.gkbar_HHst = self.dend_k
+            s.gkmbar_HHst = self.dend_km
+            s.gtbar_HHst = self.dend_cat
+            s.glbar_HHst = self.dend_cal
             s.gleak_HHst = self.dend_gleak_hh  # (S/cm2)
             s.eleak_HHst = self.dend_eleak_hh
             s.NF_HHst = self.dend_nz_factor
@@ -149,8 +147,8 @@ class Sac:
         dend.L = self.dend_l
         dend.gtbar_HHst = 0
         dend.glbar_HHst = 0
-        term.gtbar_hhst = self.dend_cat
-        term.glbar_hhst = self.dend_cal
+        term.gtbar_HHst = self.dend_cat
+        term.glbar_HHst = self.dend_cal
         term.L = self.term_l
 
         term.connect(dend)
@@ -159,9 +157,11 @@ class Sac:
     def create_synapses(self):
         # access hoc compartment
         self.dend.push()
-
         # create *named* hoc objects for each synapse (for gui compatibility)
-        h("objref prox_bps[%i], dist_bps[%i]" % (len(ls) for ls in self.bp_locs))
+        h(
+            "objref prox_bps[%i], dist_bps[%i]" %
+            (len(self.bp_locs["prox"]), len(self.bp_locs["dist"]))
+        )
 
         # complete synapses are made up of a NetStim, Syn, and NetCon
         self.bps = {
@@ -177,8 +177,9 @@ class Sac:
             },
         }
 
-        for (k, syns, props
-            ), locs in zip(self.bps.items(), self.bp_locs.values(), self.props.values()):
+        for (k, syns), locs, props in zip(
+            self.bps.items(), self.bp_locs.values(), self.bp_props.values()
+        ):
             for i in range(len(locs)):
                 # 0 -> 1 position dendrite section
                 # obtain fractional position from distance to soma
@@ -218,14 +219,14 @@ class Sac:
         dir_sign = 1 if self.forward else -1
         o_x, o_y = self.origin
         dend_x_origin = o_x + (total_l / 2 * -1 * dir_sign)
-        self.xy_locs = {
+        self.bp_xy_locs = {
             k: {
                 "x": [dir_sign * l + dend_x_origin for l in locs],
                 "y": [o_y for _ in locs]
             }
             for k, locs in self.bp_locs.items()
         }
-        return self.xy_locs
+        return self.bp_xy_locs
 
     def create_neuron(self):
         # create compartments (using parameters in self.__dict__)
@@ -236,34 +237,33 @@ class Sac:
 
     def rotate_sacs(self, rotation):
         rotated = {}
-        for s, locs in self.bp_locs.items():
+        for s, locs in self.bp_xy_locs.items():
             x, y = rotate(self.origin, locs["x"], locs["y"], rotation)
             rotated[s] = {"x": x, "y": y}
         return rotated
 
-    def bar_sweep(self, bar, dir_idx):
+    def bar_sweep(self, bar, rad_angle):
         """Return activation time for the single synapse based on the light bar
         config and the bipolar locations on the presynaptic dendrites.
         """
         ax = "x" if bar["x_motion"] else "y"
-        locs = self.rotate_sacs(-self.dir_rads[dir_idx])
-
+        rot_locs = self.rotate_sacs(-rad_angle)
         on_times = {
             s: [
-                bar["start_time"] + (l[ax] - bar[ax + "_start"]) / bar["speed"]
-                for l in locs
+                bar["start_time"] + (l - bar[ax + "_start"]) / bar["speed"]
+                for l in locs[ax]
             ]
-            for s, locs in locs.items()
+            for s, locs in rot_locs.items()
         }
 
         return on_times
 
-    def bar_onsets(self, bar, direction):
+    def bar_onsets(self, bar, rad_direction):
         # bare base onset with added jitter
-        for k, ts in self.bar_sweep(bar, direction).items():
-            for t, bp in zip(ts, self.bps[k]):
+        for k, ts in self.bar_sweep(bar, rad_direction).items():
+            for t, stim in zip(ts, self.bps[k]["stim"]):
                 jit = self.rand.normal(0, 1)
-                bp["stim"].start = t + self.bp_jitter * jit
+                stim.start = t + self.bp_jitter * jit
 
     def update_noise(self):
         for s in [self.soma, self.dend, self.term]:
@@ -277,9 +277,37 @@ class SacPair:
             "a": Sac("a", params=sac_params),
             "b": Sac("b", forward=False, params=sac_params)
         }
+        self.wire_gaba()
 
     def wire_gaba(self):
-        pass
+        self.gaba_syns = {}
+        for n, sac in self.sacs.items():
+            pos = np.round(sac.gaba_props["loc"] / sac.dend_l, decimals=5)
+            sac.dend.push()
+            self.gaba_syns[n] = {"syn": h.Exp2Syn(pos)}
+            h.pop_section()
+        for pre, post in [("a", "b"), ("b", "a")]:
+            sac = self.sacs[pre]
+            sac.term.push()
+            self.gaba_syns[pre]["conn"] = h.NetCon(
+                sac.term(1)._ref_v,
+                self.gaba_syns[post]["syn"],
+                sac.gaba_props["thresh"],
+                sac.gaba_props["delay"],
+                sac.gaba_props["weight"],
+            )
+            h.pop_section()
+
+    def get_params_dict(self):
+        return {n: sac.get_params_dict() for n, sac in self.sacs.items()}
+
+    def bar_onsets(self, stim, dir_idx):
+        for sac in self.sacs.values():
+            sac.bar_onsets(stim, dir_idx)
+
+    def update_noise(self):
+        for sac in self.sacs.values():
+            sac.update_noise()
 
 
 class Runner:
@@ -295,8 +323,17 @@ class Runner:
         self.dt = .1  # [ms, .1 = 10kHz]
         self.v_init = -70
         self.celsius = 36.9
+        self.set_hoc_params()
 
         self.config_stimulus()
+
+    def set_hoc_params(self):
+        """Set hoc NEURON environment model run parameters."""
+        h.tstop = self.tstop
+        h.steps_per_ms = self.steps_per_ms
+        h.dt = self.dt
+        h.v_init = self.v_init
+        h.celsius = self.celsius
 
     def config_stimulus(self):
         # light stimulus
@@ -322,19 +359,21 @@ class Runner:
         membrane noise seeds and run the model. Calculate somatic response and
         return to calling function."""
         h.init()
-        self.model.bar_onsets(stim, dir_idx)
+        self.model.bar_onsets(stim, self.dir_rads[dir_idx])
         self.model.update_noise()
 
         self.clear_recordings()
         h.run()
         self.dump_recordings()
 
-    def velocity_run(self, velocities, n_trials=1, prefix="", plot_summary=False):
-        """Run model through 8 directions for a number of trials and save the
-        data. Offets and probabilities of release for inhibition are updated
-        here before calling run() to execute the model.
-        """
-        self.place_electrode()
+    def velocity_run(
+        self,
+        velocities=np.linspace(.1, 2, 10),
+        n_trials=1,
+        prefix="",
+    ):
+        """"""
+        self.place_electrodes()
 
         n_vels = len(velocities)
         stim = {"type": "bar", "dir": 0}
@@ -344,7 +383,7 @@ class Runner:
             print("trial %d..." % j, end=" ", flush=True)
 
             for i in range(n_vels):
-                print("%d" % self.model.dir_labels[i], end=" ", flush=True)
+                print("%.2f" % velocities[i], end=" ", flush=True)
                 self.light_bar["speed"] = velocities[i]
                 self.run(self.light_bar, 3)  # index of 0 degrees
 
@@ -352,14 +391,17 @@ class Runner:
 
         data = {
             "params": json.dumps(params),
-            "metrics": self.summary(n_trials, plot=plot_summary),
-            "soma":
-                {k: stack_trials(n_trials, n_dirs, v)
-                 for k, v in self.soma_data.items()},
-            "thetas": self.model.thetas,
-            "bp_locs": self.model.bp_locs,
-            "probs": self.model.prs,
-            "delta": self.model.delta,
+            "data":
+                {
+                    sec: {
+                        n: {
+                            m: stack_trials(n_trials, n_vels, metric)
+                            for m, metric in d.items()
+                        }
+                        for n, d in ds.items()
+                    }
+                    for sec, ds in self.data.items()
+                },
         }
 
         return data
@@ -375,12 +417,23 @@ class Runner:
             self.recs["term"][n].record(sac.term(1)._ref_v)
 
     def dump_recordings(self):
-        for rs, ds in zip(self.recs.values(), self.data.items()):
-            vm, area, _ = measure_response(rs)
-            ds["Vm"].append(np.round(vm, decimals=3))
-            ds["area"].append(np.round(area, decimals=3))
-            ds["peak"].append(np.round(np.max(vm + 61.3), decimals=3))
+        for rs, ds in zip(self.recs.values(), self.data.values()):
+            for n in self.model.sacs.keys():
+                vm, area, _ = measure_response(rs[n])
+                ds[n]["Vm"].append(np.round(vm, decimals=3))
+                ds[n]["area"].append(np.round(area, decimals=3))
+                ds[n]["peak"].append(np.round(np.max(vm + 61.3), decimals=3))
+
+    def clear_recordings(self):
+        for sec in self.recs.values():
+            for rec in sec.values():
+                rec.resize(0)
 
 
 if __name__ == "__main__":
-    basest = "/mnt/geoff/Data/NEURONoutput/corelease/"
+    base_path = "/mnt/Data/NEURONoutput/sac_sac/"
+    os.makedirs(base_path, exist_ok=True)
+
+    model = SacPair()
+    runner = Runner(model, data_path=base_path)
+    runner.velocity_run()
