@@ -13,18 +13,25 @@ def nrn_section(name):
 
 
 def pack_hdf(pth, data_dict):
-    """
-    Takes data organized in a python dict, and creates an hdf5 with the same
-    structure.
-    """
-    pckg = h5.File(pth + '.h5', 'w')
+    """Takes data organized in a python dict, and creates an hdf5 with the
+    same structure."""
+    def rec(data, grp):
+        for k, v in data.items():
+            if type(v) is dict:
+                rec(v, grp.create_group(k))
+            else:
+                grp.create_dataset(k, data=v)
 
-    for key, dataset in data_dict.items():
-        set_grp = pckg.create_group(key)
-        for cond, data in dataset.items():
-            set_grp.create_dataset(cond, data=data)
+    with h5.File(pth + ".h5", "w") as pckg:
+        rec(data_dict, pckg)
 
-    pckg.close()
+
+def unpack_hdf(group):
+    """Recursively unpack an hdf5 of nested Groups (and Datasets) to dict."""
+    return {
+        k: v[()] if type(v) is h5._hl.dataset.Dataset else unpack_hdf(v)
+        for k, v in group.items()
+    }
 
 
 def rotate(origin, X, Y, angle):
@@ -41,7 +48,7 @@ def rotate(origin, X, Y, angle):
 
 def measure_response(vm_rec, threshold=20):
     vm = np.array(vm_rec)
-    psp = vm + 61.3
+    psp = vm + 70
     area = sum(psp[70:]) / len(psp[70:])
     thresh_count, _ = find_spikes(vm, thresh=threshold)
     return vm, area, thresh_count
@@ -108,3 +115,20 @@ def find_spikes(Vm, thresh=20):
     times = spikes * h.dt
 
     return count, times
+
+
+def thresholded_area(x, thresh=None):
+    if thresh is not None:
+        x = np.clip(x, thresh, None) - thresh
+    else:
+        x = x - np.min(x, axis=-1)
+
+    return np.sum(x, axis=-1)
+
+
+def peak_vm_deflection(x):
+    return np.max(x - np.min(x, axis=-1, keepdims=True), axis=-1)
+
+
+def pn_dsi(a, b, eps=.0000001):
+    return (a - b) / (a + b + eps)

@@ -44,28 +44,28 @@ class Sac:
 
         # soma active properties
         self.soma_na = .0  # [S/cm2]
-        self.soma_k = .035  # [S/cm2]
-        self.soma_km = .003  # [S/cm2]
+        self.soma_k = .005  # [S/cm2]
+        self.soma_km = .001  # [S/cm2]
 
         self.dend_cat = .0003
         self.dend_cal = .0003
         self.soma_gleak_hh = .0001667  # [S/cm2]
-        self.soma_eleak_hh = -60.0  # [mV]
+        self.soma_eleak_hh = -70.0  # [mV]
         self.soma_gleak_pas = .0001667  # [S/cm2]
-        self.soma_eleak_pas = -60  # [mV]
+        self.soma_eleak_pas = -70  # [mV]
 
         # dend compartment active properties
-        self.dend_na = .03  # [S/cm2] .03
-        self.dend_k = .025  # [S/cm2]
-        self.dend_km = .003  # [S/cm2]
+        self.dend_na = .00  # [S/cm2] .03
+        self.dend_k = .003  # [S/cm2]
+        self.dend_km = .0004  # [S/cm2]
         self.dend_gleak_hh = 0.0001667  # [S/cm2]
-        self.dend_eleak_hh = -60.0  # [mV]
+        self.dend_eleak_hh = -70.0  # [mV]
         self.dend_gleak_pas = .0001667  # [S/cm2]
-        self.dend_eleak_pas = -60  # [mV]
+        self.dend_eleak_pas = -70  # [mV]
 
         # membrane noise
-        self.dend_nz_factor = .1  # default NF_HHst = 1
-        self.soma_nz_factor = .1
+        self.dend_nz_factor = 0  #.1  # default NF_HHst = 1
+        self.soma_nz_factor = 0  #.1
 
         self.bp_jitter = 0
         self.bp_locs = {"prox": [5], "dist": [25, 45, 65]}
@@ -76,13 +76,15 @@ class Sac:
                     "tau2": 60,  # excitatory conductance decay tau [ms]
                     "rev": 0,  # excitatory reversal potential [mV]
                     "weight": .000275,  # weight of excitatory NetCons [uS] .00023
+                    "delay": 0,
                 },
             "dist":
                 {
                     "tau1": .1,  # inhibitory conductance rise tau [ms]
                     "tau2": 12,  # inhibitory conductance decay tau [ms]
-                    "rev": -65,  # inhibitory reversal potential [mV]
+                    "rev": 0,  # inhibitory reversal potential [mV]
                     "weight": .000495,  # weight of inhibitory NetCons [uS]
+                    "delay": 0,
                 }
         }
 
@@ -159,20 +161,20 @@ class Sac:
         self.dend.push()
         # create *named* hoc objects for each synapse (for gui compatibility)
         h(
-            "objref prox_bps[%i], dist_bps[%i]" %
-            (len(self.bp_locs["prox"]), len(self.bp_locs["dist"]))
+            "objref prox_bps_%s[%i], dist_bps_%s[%i]" %
+            (self.name, len(self.bp_locs["prox"]), self.name, len(self.bp_locs["dist"]))
         )
 
         # complete synapses are made up of a NetStim, Syn, and NetCon
         self.bps = {
             "prox": {
                 "stim": [],
-                "syn": h.prox_bps,
+                "syn": getattr(h, "prox_bps_%s" % self.name),
                 "con": []
             },
             "dist": {
                 "stim": [],
-                "syn": h.dist_bps,
+                "syn": getattr(h, "dist_bps_%s" % self.name),
                 "con": []
             },
         }
@@ -194,7 +196,7 @@ class Sac:
                 # Network Stimulus object (activates synaptic event)
                 syns["stim"].append(h.NetStim(pos))
                 syns["stim"][i].interval = 0
-                syns["stim"][i].number = 0
+                syns["stim"][i].number = 1
                 syns["stim"][i].noise = 0
 
                 # Network Connection object (connects stimulus to synapse)
@@ -203,13 +205,12 @@ class Sac:
                         syns["stim"][i],
                         syns["syn"][i],
                         0,  # threshold
-                        0,  # delay [ms]
+                        props["delay"],
                         props["weight"],  # conductance strength
                     )
                 )
 
-        # remove section from access stack
-        h.pop_section()
+        h.pop_section()  # remove section from access stack
 
     def calc_xy_locs(self):
         """Origin of the arena is (0, 0), so the dendrite is positioned with
@@ -255,7 +256,6 @@ class Sac:
             ]
             for s, locs in rot_locs.items()
         }
-
         return on_times
 
     def bar_onsets(self, bar, rad_direction):
@@ -285,6 +285,9 @@ class SacPair:
             pos = np.round(sac.gaba_props["loc"] / sac.dend_l, decimals=5)
             sac.dend.push()
             self.gaba_syns[n] = {"syn": h.Exp2Syn(pos)}
+            self.gaba_syns[n]["syn"].tau1 = sac.gaba_props["tau1"]
+            self.gaba_syns[n]["syn"].tau2 = sac.gaba_props["tau2"]
+            self.gaba_syns[n]["syn"].e = sac.gaba_props["rev"]
             h.pop_section()
         for pre, post in [("a", "b"), ("b", "a")]:
             sac = self.sacs[pre]
@@ -318,9 +321,9 @@ class Runner:
         self.model = model
 
         # hoc environment parameters
-        self.tstop = 2000  # [ms]
+        self.tstop = 4000  # [ms]
         self.steps_per_ms = 1  # [10 = 10kHz]
-        self.dt = .1  # [ms, .1 = 10kHz]
+        self.dt = 1  # [ms, .1 = 10kHz]
         self.v_init = -70
         self.celsius = 36.9
         self.set_hoc_params()
@@ -354,6 +357,16 @@ class Runner:
         self.dir_inds = np.array(self.dir_labels).argsort()
         self.circle = np.deg2rad([0, 45, 90, 135, 180, 225, 270, 315, 0])
 
+    def get_params_dict(self):
+        params = self.__dict__.copy()
+        # remove the non-param entries (model objects)
+        for key in [
+            "model", "recs", "data", "dir_labels", "dir_rads", "dirs", "dir_inds",
+            "circle"
+        ]:
+            params.pop(key)
+        return params
+
     def run(self, stim, dir_idx):
         """Initialize model, set synapse onset and release numbers, update
         membrane noise seeds and run the model. Calculate somatic response and
@@ -368,7 +381,7 @@ class Runner:
 
     def velocity_run(
         self,
-        velocities=np.linspace(.1, 2, 10),
+        velocities=[.1, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2],
         n_trials=1,
         prefix="",
     ):
@@ -377,7 +390,9 @@ class Runner:
 
         n_vels = len(velocities)
         stim = {"type": "bar", "dir": 0}
-        params = self.model.get_params_dict()  # for logging
+        model_params = self.model.get_params_dict()  # for logging
+        exp_params = self.get_params_dict()
+        exp_params["velocities"] = velocities
 
         for j in range(n_trials):
             print("trial %d..." % j, end=" ", flush=True)
@@ -390,7 +405,8 @@ class Runner:
             print("")  # next line
 
         data = {
-            "params": json.dumps(params),
+            "model_params": json.dumps(model_params),
+            "exp_params": json.dumps(exp_params),
             "data":
                 {
                     sec: {
@@ -407,33 +423,54 @@ class Runner:
         return data
 
     def place_electrodes(self):
-        self.recs = {"soma": {}, "term": {}}
-        self.data = {"soma": {}, "term": {}}
+        self.recs = {"soma": {}, "term": {}, "gaba": {}}
+        self.data = {"soma": {}, "term": {}, "gaba": {}}
         for n, sac in self.model.sacs.items():
             for p in ["soma", "term"]:
                 self.recs[p][n] = h.Vector()
-                self.data[p][n] = {"Vm": [], "area": [], "peak": []}
+                # self.data[p][n] = {"Vm": [], "area": [], "peak": []}
+                self.data[p][n] = {
+                    "v": [],
+                }
             self.recs["soma"][n].record(sac.soma(0.5)._ref_v)
             self.recs["term"][n].record(sac.term(1)._ref_v)
 
+            self.recs["gaba"][n] = {"i": h.Vector(), "g": h.Vector()}
+            self.data["gaba"][n] = {"i": [], "g": []}
+            self.recs["gaba"][n]["i"].record(self.model.gaba_syns[n]["syn"]._ref_i)
+            self.recs["gaba"][n]["g"].record(self.model.gaba_syns[n]["syn"]._ref_g)
+
     def dump_recordings(self):
-        for rs, ds in zip(self.recs.values(), self.data.values()):
+        for (p, rs), ds in zip(self.recs.items(), self.data.values()):
             for n in self.model.sacs.keys():
-                vm, area, _ = measure_response(rs[n])
-                ds[n]["Vm"].append(np.round(vm, decimals=3))
-                ds[n]["area"].append(np.round(area, decimals=3))
-                ds[n]["peak"].append(np.round(np.max(vm + 61.3), decimals=3))
+                if p in ["soma", "term"]:
+                    vm, area, _ = measure_response(rs[n])
+                    ds[n]["v"].append(np.round(rs[n], decimals=3))
+                else:
+                    for k in ["i", "g"]:
+                        ds[n][k].append(np.array(rs[n][k]))
 
     def clear_recordings(self):
-        for sec in self.recs.values():
-            for rec in sec.values():
-                rec.resize(0)
+        """Clear out all of the recording vectors in the recs dict, accounting for
+        arbitrary levels of nesting, as long as all of the leaves are hoc vectors."""
+        def loop(rs):
+            for r in rs:
+                if type(r) == dict:
+                    loop(r.values())
+                else:
+                    r.resize(0)
+
+        loop(self.recs.values())
 
 
 if __name__ == "__main__":
+    # h.xopen("sac_pair.ses")  # open neuron gui session
+    h.xopen("pair.ses")  # open neuron gui session
     base_path = "/mnt/Data/NEURONoutput/sac_sac/"
-    os.makedirs(base_path, exist_ok=True)
+    data_path = base_path + "test_run/"
+    os.makedirs(data_path, exist_ok=True)
 
     model = SacPair()
-    runner = Runner(model, data_path=base_path)
-    runner.velocity_run()
+    runner = Runner(model, data_path=data_path)
+    data = runner.velocity_run()
+    pack_hdf(data_path + "test", data)
