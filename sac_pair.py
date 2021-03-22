@@ -4,6 +4,7 @@ from neuron import h, gui
 import os
 import h5py as h5
 import json
+from copy import deepcopy
 
 import numpy as np  # arrays
 import matplotlib.pyplot as plt
@@ -329,6 +330,7 @@ class Runner:
         self.set_hoc_params()
 
         self.config_stimulus()
+        self.place_electrodes()
 
     def set_hoc_params(self):
         """Set hoc NEURON environment model run parameters."""
@@ -362,7 +364,7 @@ class Runner:
         # remove the non-param entries (model objects)
         for key in [
             "model", "recs", "data", "dir_labels", "dir_rads", "dirs", "dir_inds",
-            "circle"
+            "circle", "empty_data"
         ]:
             params.pop(key)
         return params
@@ -386,8 +388,6 @@ class Runner:
         prefix="",
     ):
         """"""
-        self.place_electrodes()
-
         n_vels = len(velocities)
         stim = {"type": "bar", "dir": 0}
         model_params = self.model.get_params_dict()  # for logging
@@ -419,6 +419,48 @@ class Runner:
                     for sec, ds in self.data.items()
                 },
         }
+        self.data = deepcopy(self.empty_data)  # clear out stored data
+
+        return data
+
+    def velocity_mechanism_run(
+        self,
+        velocities=[.1, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2],
+        n_trials=1,
+        uniform_props={
+            "tau1": 1,
+            "tau2": 12,
+        },
+    ):
+        data = {}
+        data["control"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
+
+        # no reciprocal GABA
+        for sac, syn in zip(self.model.sacs.values(), self.model.gaba_syns.values()):
+            orig_weight = sac.gaba_props["weight"]
+            sac.gaba_props["weight"] = 0
+            syn["conn"].weight[0] = 0
+        data["no_gaba"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
+        for sac, syn in zip(self.model.sacs.values(), self.model.gaba_syns.values()):
+            sac.gaba_props["weight"] = orig_weight
+            syn["conn"].weight[0] = orig_weight
+
+        # uniform BP time courses
+        orig_props = {}
+        for n, sac in self.model.sacs.items():
+            orig_props[n] = sac.bp_props.copy()
+            sac.bp_props = {k: {**v, **uniform_props} for k, v in sac.bp_props.items()}
+            for bps in sac.bps.values():
+                for syn in bps["syn"]:
+                    syn.tau1 = uniform_props["tau1"]
+                    syn.tau2 = uniform_props["tau2"]
+        data["uniform"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
+        for n, sac in self.model.sacs.items():
+            sac.bp_props = orig_props[n]
+            for bps, props in zip(sac.bps.values(), sac.bp_props.values()):
+                for syn in bps["syn"]:
+                    syn.tau1 = props["tau1"]
+                    syn.tau2 = props["tau2"]
 
         return data
 
@@ -428,7 +470,6 @@ class Runner:
         for n, sac in self.model.sacs.items():
             for p in ["soma", "term"]:
                 self.recs[p][n] = h.Vector()
-                # self.data[p][n] = {"Vm": [], "area": [], "peak": []}
                 self.data[p][n] = {
                     "v": [],
                 }
@@ -439,6 +480,7 @@ class Runner:
             self.data["gaba"][n] = {"i": [], "g": []}
             self.recs["gaba"][n]["i"].record(self.model.gaba_syns[n]["syn"]._ref_i)
             self.recs["gaba"][n]["g"].record(self.model.gaba_syns[n]["syn"]._ref_g)
+        self.empty_data = deepcopy(self.data)  # for resetting
 
     def dump_recordings(self):
         for (p, rs), ds in zip(self.recs.items(), self.data.values()):
