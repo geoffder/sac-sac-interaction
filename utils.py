@@ -132,3 +132,16 @@ def peak_vm_deflection(x):
 
 def pn_dsi(a, b, eps=.0000001):
     return (a - b) / (a + b + eps)
+
+
+def clean_axes(axes):
+    """A couple basic changes I often make to pyplot axes. If input is an
+    iterable of axes (e.g. from plt.subplots()), apply recursively."""
+    if hasattr(axes, "__iter__"):
+        for a in axes:
+            clean_axes(a)
+    else:
+        axes.spines["right"].set_visible(False)
+        axes.spines["top"].set_visible(False)
+        for ticks in (axes.get_yticklabels()):
+            ticks.set_fontsize(11)
