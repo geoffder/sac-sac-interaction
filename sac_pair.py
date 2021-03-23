@@ -331,8 +331,8 @@ class Runner:
 
         self.config_stimulus()
         self.place_electrodes()
-        self.gaba_on = True
-        self.uniform_bps = False
+        self.orig_gaba_weights = None
+        self.orig_bp_props = None
 
     def set_hoc_params(self):
         """Set hoc NEURON environment model run parameters."""
@@ -366,7 +366,7 @@ class Runner:
         # remove the non-param entries (model objects)
         for key in [
             "model", "recs", "data", "dir_labels", "dir_rads", "dirs", "dir_inds",
-            "circle", "empty_data"
+            "circle", "empty_data", "orig_gaba_weights", "orig_bp_props"
         ]:
             params.pop(key)
         return params
@@ -426,8 +426,7 @@ class Runner:
         return data
 
     def remove_gaba(self):
-        if self.gaba_on:
-            self.gaba_on = False
+        if self.orig_gaba_weights is None:
             self.orig_gaba_weights = {}
             for (n, sac
                 ), syn in zip(self.model.sacs.items(), self.model.gaba_syns.values()):
@@ -436,16 +435,15 @@ class Runner:
                 syn["conn"].weight[0] = 0
 
     def restore_gaba(self):
-        if not self.gaba_on:
-            self.gaba_on = True
+        if self.orig_gaba_weights is not None:
             for (n, sac
                 ), syn in zip(self.model.sacs.items(), self.model.gaba_syns.values()):
                 sac.gaba_props["weight"] = self.orig_gaba_weights[n]
                 syn["conn"].weight[0] = self.orig_gaba_weights[n]
+            self.orig_gaba_weights = None
 
     def unify_bps(self, taus):
-        if not self.uniform_bps:
-            self.uniform_bps = True
+        if self.orig_bp_props is None:
             self.orig_bp_props = {}
             for n, sac in self.model.sacs.items():
                 self.orig_bp_props[n] = sac.bp_props.copy()
@@ -456,14 +454,14 @@ class Runner:
                         syn.tau2 = taus["tau2"]
 
     def restore_bps(self):
-        if self.uniform_bps:
-            self.uniform_bps = False
+        if self.orig_bp_props is not None:
             for n, sac in self.model.sacs.items():
                 sac.bp_props = self.orig_bp_props[n]
                 for bps, props in zip(sac.bps.values(), sac.bp_props.values()):
                     for syn in bps["syn"]:
                         syn.tau1 = props["tau1"]
                         syn.tau2 = props["tau2"]
+            self.orig_bp_props = None
 
     def velocity_mechanism_run(
         self,
