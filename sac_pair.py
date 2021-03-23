@@ -331,6 +331,8 @@ class Runner:
 
         self.config_stimulus()
         self.place_electrodes()
+        self.gaba_on = True
+        self.uniform_bps = False
 
     def set_hoc_params(self):
         """Set hoc NEURON environment model run parameters."""
@@ -423,6 +425,46 @@ class Runner:
 
         return data
 
+    def remove_gaba(self):
+        if self.gaba_on:
+            self.gaba_on = False
+            self.orig_gaba_weights = {}
+            for (n, sac
+                ), syn in zip(self.model.sacs.items(), self.model.gaba_syns.values()):
+                self.orig_gaba_weights[n] = sac.gaba_props["weight"]
+                sac.gaba_props["weight"] = 0
+                syn["conn"].weight[0] = 0
+
+    def restore_gaba(self):
+        if not self.gaba_on:
+            self.gaba_on = True
+            for (n, sac
+                ), syn in zip(self.model.sacs.items(), self.model.gaba_syns.values()):
+                sac.gaba_props["weight"] = self.orig_gaba_weights[n]
+                syn["conn"].weight[0] = self.orig_gaba_weights[n]
+
+    def unify_bps(self, taus):
+        if not self.uniform_bps:
+            self.uniform_bps = True
+            self.orig_bp_props = {}
+            for n, sac in self.model.sacs.items():
+                self.orig_bp_props[n] = sac.bp_props.copy()
+                sac.bp_props = {k: {**v, **taus} for k, v in sac.bp_props.items()}
+                for bps in sac.bps.values():
+                    for syn in bps["syn"]:
+                        syn.tau1 = taus["tau1"]
+                        syn.tau2 = taus["tau2"]
+
+    def restore_bps(self):
+        if self.uniform_bps:
+            self.uniform_bps = False
+            for n, sac in self.model.sacs.items():
+                sac.bp_props = self.orig_bp_props[n]
+                for bps, props in zip(sac.bps.values(), sac.bp_props.values()):
+                    for syn in bps["syn"]:
+                        syn.tau1 = props["tau1"]
+                        syn.tau2 = props["tau2"]
+
     def velocity_mechanism_run(
         self,
         velocities=[.1, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2],
@@ -435,32 +477,19 @@ class Runner:
         data = {}
         data["control"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
 
-        # no reciprocal GABA
-        for sac, syn in zip(self.model.sacs.values(), self.model.gaba_syns.values()):
-            orig_weight = sac.gaba_props["weight"]
-            sac.gaba_props["weight"] = 0
-            syn["conn"].weight[0] = 0
+        self.remove_gaba()
         data["no_gaba"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
-        for sac, syn in zip(self.model.sacs.values(), self.model.gaba_syns.values()):
-            sac.gaba_props["weight"] = orig_weight
-            syn["conn"].weight[0] = orig_weight
+        self.restore_gaba()
 
-        # uniform BP time courses
-        orig_props = {}
-        for n, sac in self.model.sacs.items():
-            orig_props[n] = sac.bp_props.copy()
-            sac.bp_props = {k: {**v, **uniform_props} for k, v in sac.bp_props.items()}
-            for bps in sac.bps.values():
-                for syn in bps["syn"]:
-                    syn.tau1 = uniform_props["tau1"]
-                    syn.tau2 = uniform_props["tau2"]
+        self.unify_bps(uniform_props)
         data["uniform"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
-        for n, sac in self.model.sacs.items():
-            sac.bp_props = orig_props[n]
-            for bps, props in zip(sac.bps.values(), sac.bp_props.values()):
-                for syn in bps["syn"]:
-                    syn.tau1 = props["tau1"]
-                    syn.tau2 = props["tau2"]
+        self.restore_bps()
+
+        self.remove_gaba()
+        self.unify_bps(uniform_props)
+        data["no_mechs"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
+        self.restore_gaba()
+        self.restore_bps()
 
         return data
 
