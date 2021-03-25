@@ -496,12 +496,17 @@ class Runner:
         self.data = {"soma": {}, "term": {}, "gaba": {}}
         for n, sac in self.model.sacs.items():
             for p in ["soma", "term"]:
-                self.recs[p][n] = h.Vector()
-                self.data[p][n] = {
-                    "v": [],
+                self.recs[p][n] = {
+                    "v": h.Vector(),
+                    "ica": h.Vector(),
                 }
-            self.recs["soma"][n].record(sac.soma(0.5)._ref_v)
-            self.recs["term"][n].record(sac.term(1)._ref_v)
+                self.data[p][n] = {k: [] for k in self.recs[p][n].keys()}
+                for k, vec in self.recs[p][n].items():
+                    vec.record(
+                        getattr(
+                            getattr(sac, p)(0.5 if p == "soma" else 1), "_ref_%s" % k
+                        )
+                    )
 
             self.recs["gaba"][n] = {"i": h.Vector(), "g": h.Vector()}
             self.data["gaba"][n] = {"i": [], "g": []}
@@ -513,8 +518,9 @@ class Runner:
         for (p, rs), ds in zip(self.recs.items(), self.data.values()):
             for n in self.model.sacs.keys():
                 if p in ["soma", "term"]:
-                    vm, area, _ = measure_response(rs[n])
-                    ds[n]["v"].append(np.round(rs[n], decimals=3))
+                    for k, vec in rs[n].items():
+                        ds[n][k].append(np.round(vec, decimals=3))
+                    # ds[n]["v"].append(np.round(rs[n], decimals=3))
                 else:
                     for k in ["i", "g"]:
                         ds[n][k].append(np.array(rs[n][k]))
