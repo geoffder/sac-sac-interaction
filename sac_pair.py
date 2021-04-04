@@ -215,15 +215,20 @@ class Sac:
 
     def calc_xy_locs(self):
         """Origin of the arena is (0, 0), so the dendrite is positioned with
-        that as the centre. X locations are calculated for based on the
-        distances of each bipolar cell from the soma."""
+        that as the centre. X locations are calculated based on the distances of
+        each bipolar cell from the soma. Dendrite origins are refer to the 0
+        position of the section, meaning it extends from that in a different
+        direction depending on the orientation of the SAC."""
         total_l = self.dend_l + self.term_l
         dir_sign = 1 if self.forward else -1
         o_x, o_y = self.origin
-        dend_x_origin = o_x + (total_l / 2 * -1 * dir_sign)
+        self.dend_x_origin = o_x + ((total_l + self.gaba_props["loc"]) / -2 * dir_sign)
+        self.term_x_origin = self.dend_x_origin + (self.dend_l * dir_sign)
+        self.soma_x_origin = self.dend_x_origin + (self.soma_l / 2 * dir_sign * -1)
+        self.gaba_x_loc = self.dend_x_origin + (total_l * dir_sign)
         self.bp_xy_locs = {
             k: {
-                "x": [dir_sign * l + dend_x_origin for l in locs],
+                "x": [dir_sign * l + self.dend_x_origin for l in locs],
                 "y": [o_y for _ in locs]
             }
             for k, locs in self.bp_locs.items()
@@ -473,16 +478,20 @@ class Runner:
         },
     ):
         data = {}
+        print("Control run:")
         data["control"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
 
+        print("No GABA run:")
         self.remove_gaba()
         data["no_gaba"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
         self.restore_gaba()
 
+        print("Uniform Bipolar run:")
         self.unify_bps(uniform_props)
         data["uniform"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
         self.restore_bps()
 
+        print("No Mechanism run:")
         self.remove_gaba()
         self.unify_bps(uniform_props)
         data["no_mechs"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
