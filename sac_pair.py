@@ -414,17 +414,7 @@ class Runner:
         data = {
             "model_params": json.dumps(model_params),
             "exp_params": json.dumps(exp_params),
-            "data":
-                {
-                    sec: {
-                        n: {
-                            m: stack_trials(n_trials, n_vels, metric)
-                            for m, metric in d.items()
-                        }
-                        for n, d in ds.items()
-                    }
-                    for sec, ds in self.data.items()
-                },
+            "data": self.stack_data(n_trials, n_vels)
         }
         self.data = deepcopy(self.empty_data)  # clear out stored data
 
@@ -501,8 +491,8 @@ class Runner:
         return data
 
     def place_electrodes(self):
-        self.recs = {"soma": {}, "term": {}, "gaba": {}}
-        self.data = {"soma": {}, "term": {}, "gaba": {}}
+        self.recs = {"soma": {}, "term": {}, "gaba": {}, "bps": {}}
+        self.data = {"soma": {}, "term": {}, "gaba": {}, "bps": {}}
         for n, sac in self.model.sacs.items():
             for p in ["soma", "term"]:
                 self.recs[p][n] = {
@@ -517,6 +507,16 @@ class Runner:
                         )
                     )
 
+            self.recs["bps"][n], self.data["bps"][n] = {}, {}
+            for (k, bps) in sac.bps.items():
+                self.recs["bps"][n][k], self.data["bps"][n][k] = {}, {}
+                for i, syn in enumerate(bps["syn"]):
+                    self.recs["bps"][n][k][i], self.data["bps"][n][k][i] = {}, {}
+                    for s in ["i", "g"]:
+                        self.recs["bps"][n][k][i][s] = h.Vector()
+                        self.data["bps"][n][k][i][s] = []
+                        self.recs["bps"][n][k][i][s].record(getattr(syn, "_ref_%s" % s))
+
             self.recs["gaba"][n] = {"i": h.Vector(), "g": h.Vector()}
             self.data["gaba"][n] = {"i": [], "g": []}
             self.recs["gaba"][n]["i"].record(self.model.gaba_syns[n]["syn"]._ref_i)
@@ -529,7 +529,11 @@ class Runner:
                 if p in ["soma", "term"]:
                     for k, vec in rs[n].items():
                         ds[n][k].append(np.round(vec, decimals=3))
-                    # ds[n]["v"].append(np.round(rs[n], decimals=3))
+                elif p == "bps":
+                    for typ, bp_rs in rs[n].items():
+                        for i, r in bp_rs.items():
+                            for k in ["i", "g"]:
+                                ds[n][typ][i][k].append(np.array(r[k]))
                 else:
                     for k in ["i", "g"]:
                         ds[n][k].append(np.array(rs[n][k]))
@@ -545,6 +549,15 @@ class Runner:
                     r.resize(0)
 
         loop(self.recs.values())
+
+    def stack_data(self, n_trials, n_vels):
+        def stacker(val):
+            if type(val) == dict:
+                return {k: stacker(v) for k, v in val.items()}
+            else:
+                return stack_trials(n_trials, n_vels, val)
+
+        return {k: stacker(v) for k, v in self.data.items()}
 
 
 if __name__ == "__main__":
