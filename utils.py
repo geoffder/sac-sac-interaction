@@ -17,6 +17,7 @@ def pack_hdf(pth, data_dict):
     same structure."""
     def rec(data, grp):
         for k, v in data.items():
+            k = str(k)  # in case k is an int
             if type(v) is dict:
                 rec(v, grp.create_group(k))
             else:
@@ -145,3 +146,21 @@ def clean_axes(axes):
         axes.spines["top"].set_visible(False)
         for ticks in (axes.get_yticklabels()):
             ticks.set_fontsize(11)
+
+
+def nearest_index(arr, v):
+    """Index of value closest to v in ndarray `arr`"""
+    return np.abs(arr - v).argmin()
+
+
+def apply_to_data(f, data):
+    """Recursively apply the same operation to all ndarrays stored in the given
+    dictionary. It may have arbitary levels of nesting, as long as the leaves are
+    arrays and they are a shape that the given function can operate on."""
+    def applyer(val):
+        if type(val) == dict:
+            return {k: applyer(v) for k, v in val.items()}
+        else:
+            return f(val)
+
+    return {k: applyer(v) for k, v in data.items()}
