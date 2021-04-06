@@ -14,10 +14,12 @@ def nrn_section(name):
 
 def pack_hdf(pth, data_dict):
     """Takes data organized in a python dict, and creates an hdf5 with the
-    same structure."""
+    same structure. Keys are converted to strings to comply to hdf5 group naming
+    convention. In `unpack_hdf`, if the key is all digits, it will be converted
+    back from string."""
     def rec(data, grp):
         for k, v in data.items():
-            k = str(k)  # in case k is an int
+            k = str(k) if type(k) != str else k
             if type(v) is dict:
                 rec(v, grp.create_group(k))
             else:
@@ -30,7 +32,8 @@ def pack_hdf(pth, data_dict):
 def unpack_hdf(group):
     """Recursively unpack an hdf5 of nested Groups (and Datasets) to dict."""
     return {
-        k: v[()] if type(v) is h5._hl.dataset.Dataset else unpack_hdf(v)
+        int(k) if k.isdigit() else k:
+        v[()] if type(v) is h5._hl.dataset.Dataset else unpack_hdf(v)
         for k, v in group.items()
     }
 
@@ -164,3 +167,26 @@ def apply_to_data(f, data):
             return f(val)
 
     return {k: applyer(v) for k, v in data.items()}
+
+
+def apply_to_data2(f, d1, d2):
+    def applyer(v1, v2):
+        if type(v1) == dict:
+            return {k: applyer(v1, v2) for (k, v1), v2 in zip(v1.items(), v2.values())}
+        else:
+            return f(v1, v2)
+
+    return {k: applyer(v1, v2) for (k, v1), v2 in zip(d1.items(), d2.values())}
+
+
+def stack_pair_data(exp):
+    """Expects data in the form exported from SAC-SAC experiments.
+    conditions -> section/synapses -> sacs -> metrics"""
+    return {
+        cond: {
+            k:
+            apply_to_data2(lambda a, b: np.stack([a, b], axis=0), ex[k]["a"], ex[k]["b"])
+            for k in ex.keys()
+        }
+        for cond, ex in exp.items()
+    }
