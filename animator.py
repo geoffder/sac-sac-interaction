@@ -41,8 +41,8 @@ class SacSacAnimator:
             0, exp_params["tstop"] + exp_params["dt"], exp_params["dt"]
         )
         self.avg_exps = apply_to_data(lambda a: np.mean(a, axis=0), exps)
-        self.min_exps = apply_to_data(lambda a: np.min(a), self.avg_exps)
-        self.max_exps = apply_to_data(lambda a: np.max(a), self.avg_exps)
+        self.min_exps = apply_to_data(np.min, stack_pair_data(self.avg_exps))
+        self.max_exps = apply_to_data(np.max, stack_pair_data(self.avg_exps))
         self.velocities = exp_params["velocities"]
         self.conds = [c for c in self.exps.keys()]
         self.cmap = cm.get_cmap("jet", 12)
@@ -259,26 +259,28 @@ class SacSacAnimator:
         for n, s in self.schemes.items():
             s["soma"].set_color(
                 self.cmap(
-                    (ex["soma"][n]["v"][self.vel_idx, self.t_idx] - mins["soma"][n]["v"])
-                    / (maxs["soma"][n]["v"] - mins["soma"][n]["v"])
+                    (ex["soma"][n]["v"][self.vel_idx, self.t_idx] - mins["soma"]["v"]) /
+                    (maxs["soma"]["v"] - mins["soma"]["v"])
                 )
             )
             s["term"].set_color(
                 self.cmap(
-                    (ex["term"][n]["v"][self.vel_idx, self.t_idx] - mins["term"][n]["v"])
-                    / (maxs["term"][n]["v"] - mins["term"][n]["v"])
+                    (ex["term"][n]["v"][self.vel_idx, self.t_idx] - mins["term"]["v"]) /
+                    (maxs["term"]["v"] - mins["term"]["v"])
                 )
             )
+            # GABA arrow coming from pre-synaptic side, so flip n
             s["gaba"].set_color(
                 self.cmap(
-                    ex["gaba"][n]["g"][self.vel_idx, self.t_idx] / maxs["gaba"][n]["g"]
+                    ex["gaba"]["b" if n == "a" else "a"]["g"][self.vel_idx, self.t_idx] /
+                    maxs["gaba"]["g"]
                 )
             )
             for k, bps in s["bps"].items():
                 for i, b in enumerate(bps):
                     b.set_color(
                         self.cmap(
-                            ex["bps"][n][k][str(i)]["g"][self.vel_idx, self.t_idx] /
-                            (maxs["bps"][n][k][str(i)]["g"] + .00001)
+                            ex["bps"][n][k][i]["g"][self.vel_idx, self.t_idx] /
+                            (maxs["bps"][k][i]["g"] + .00001)
                         )
                     )
