@@ -225,7 +225,7 @@ class SacSacAnimator:
         self.bar_rect = patches.Rectangle((bar_x, -15), 1, 30, color="black")
         self.scheme_ax.add_patch(self.bar_rect)
 
-    def build_rec_ax(self, ax, loc, rec_key, ymin, ymax, xlbl="", ylbl=""):
+    def build_rec_ax(self, ax, loc, rec_key, ymin, ymax, xlbl=None, ylbl=None):
         ax.set_ylabel(ylbl)
         ax.set_xlabel(xlbl)
         ax.set_xlim(self.rec_xaxis.min(), self.rec_xaxis.max())
@@ -252,14 +252,22 @@ class SacSacAnimator:
 
     def build_gaba_g_ax(self):
         self.gaba_g_lines, self.gaba_g_t_marker = self.build_rec_ax(
-            self.gaba_g_ax, "gaba", "g", 0, 0.0035, "Time (ms)", "GABA Conductance (μS)"
+            self.gaba_g_ax, "gaba", "g", 0, 0.0035, ylbl="GABA Conductance (μS)"
         )
+        self.gaba_g_ax.set_xticklabels([])
+        self.gaba_g_ax._shared_x_axes.join(self.gaba_g_ax, self.term_vm_ax)
 
     def build_bp_g_ax(self):
         self.bp_g_lines, self.bp_g_t_marker = self.build_rec_ax(
-            self.bp_g_ax, "combined_bps", "g", 0, 0.001, "Time (ms)",
-            "Total BPC Conductance (μS)"
+            self.bp_g_ax,
+            "combined_bps",
+            "g",
+            0,
+            0.001,
+            ylbl="Total BPC Conductance (μS)"
         )
+        self.bp_g_ax.set_xticklabels([])
+        self.bp_g_ax._shared_x_axes.join(self.bp_g_ax, self.term_vm_ax)
 
     def on_cond_slide(self, v):
         self.cond = self.conds[int(v)]
