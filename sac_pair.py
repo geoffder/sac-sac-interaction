@@ -451,7 +451,7 @@ class Runner:
     def restore_bps(self):
         if self.orig_bp_props is not None:
             for n, sac in self.model.sacs.items():
-                sac.bp_props = self.orig_bp_props[n]
+                sac.bp_props = deepcopy(self.orig_bp_props)
                 for bps, props in zip(sac.bps.values(), sac.bp_props.values()):
                     for syn in bps["syn"]:
                         syn.tau1 = props["tau1"]

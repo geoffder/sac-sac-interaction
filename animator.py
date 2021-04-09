@@ -24,15 +24,26 @@ class SacSacAnimator:
         },
         bp_offset=2,
         bp_width=3,
-        bp_height=5
+        bp_height=5,
+        reveal_time=False,
     ):
         self.exp_params = exp_params
         self.model_params = model_params  # TODO: improve to a dict of conditions
         self.exps = exps
+        # HACK: create basic summed bipolar measures for easier plotting for now
+        for cond in self.exps.keys():
+            self.exps[cond]["combined_bps"] = {
+                n: {
+                    m: np.sum(
+                        [bp[m] for bps in sac.values() for bp in bps.values()], axis=0
+                    )
+                    for m in ["g", "i"]
+                }
+                for n, sac in exps[cond]["bps"].items()
+            }
         self.y_off = y_off
-        self.bp_offset = bp_offset
-        self.bp_width = bp_width
-        self.bp_height = bp_height
+        self.bp_offset, self.bp_width, self.bp_height = bp_offset, bp_width, bp_height
+        self.reveal_time = reveal_time
         self.schemes = self.build_schemes()
         self.cond = "control"
         self.vel_idx = 0
@@ -40,6 +51,7 @@ class SacSacAnimator:
         self.rec_xaxis = np.arange(
             0, exp_params["tstop"] + exp_params["dt"], exp_params["dt"]
         )
+        self.n_pts = self.rec_xaxis.size
         self.avg_exps = apply_to_data(lambda a: np.mean(a, axis=0), exps)
         self.min_exps = apply_to_data(np.min, stack_pair_data(self.avg_exps))
         self.max_exps = apply_to_data(np.max, stack_pair_data(self.avg_exps))
@@ -140,18 +152,25 @@ class SacSacAnimator:
         if hasattr(self, "fig"):
             del (self.fig, self.ax, self.cond_slider, self.vel_slider, self.time_slider)
         if "gridspec_kw" not in plot_kwargs:
-            plot_kwargs["gridspec_kw"] = {"height_ratios": [.45, .05, .05, .05, .4]}
-        self.fig, self.ax = plt.subplots(5, **plot_kwargs)
-        self.scheme_ax, self.cond_slide_ax, self.vel_slide_ax, self.time_slide_ax, self.rec_ax = self.ax
+            plot_kwargs["gridspec_kw"] = {
+                "height_ratios": [.225, .033, .033, .033, .225, .225, .225],
+                "hspace": .65
+            }
+        self.fig, self.ax = plt.subplots(7, **plot_kwargs)
+        (
+            self.scheme_ax, self.cond_slide_ax, self.vel_slide_ax, self.time_slide_ax,
+            self.bp_g_ax, self.gaba_g_ax, self.term_vm_ax
+        ) = self.ax
         self.build_cond_slide_ax()
         self.build_vel_slide_ax()
         self.build_time_slide_ax()
-        self.build_rec_ax(-70, -40)
+        self.build_term_vm_ax()
+        self.build_gaba_g_ax()
+        self.build_bp_g_ax()
         self.build_scheme_ax()
-        self.update_rec()
+        self.update_rec_axes()
         self.update_scheme()
         self.connect_events()
-        self.fig.tight_layout()
         return self.fig, self.ax
 
     def build_cond_slide_ax(self):
@@ -199,7 +218,6 @@ class SacSacAnimator:
     def build_scheme_ax(self):
         self.scheme_ax.set_xlim(-180, 180)
         self.scheme_ax.set_ylim(-15, 15)
-        self.scheme_ax.set_xlabel("μm")
         self.scheme_ax.set_ylabel("μm")
         self.apply_patches(self.scheme_ax)
         self.label_bps(self.scheme_ax)
@@ -207,25 +225,47 @@ class SacSacAnimator:
         self.bar_rect = patches.Rectangle((bar_x, -15), 1, 30, color="black")
         self.scheme_ax.add_patch(self.bar_rect)
 
-    def build_rec_ax(self, ymin, ymax):
-        self.rec_ax.set_ylabel("Terminal Voltage (mV)")
-        self.rec_ax.set_xlabel("Time (ms)")
-        self.term_lines = {
-            n: self.rec_ax.plot(rs["v"][self.vel_idx])[0]
-            for n, rs in self.avg_exps[self.cond]["term"].items()
+    def build_rec_ax(self, ax, loc, rec_key, ymin, ymax, xlbl="", ylbl=""):
+        ax.set_ylabel(ylbl)
+        ax.set_xlabel(xlbl)
+        ax.set_xlim(self.rec_xaxis.min(), self.rec_xaxis.max())
+        end = (self.t_idx + 1) if self.reveal_time else self.n_pts
+        lines = {
+            n: ax.plot(
+                self.rec_xaxis[:end], rs[rec_key][self.vel_idx][:end], label="sac %s" % n
+            )[0]
+            for n, rs in self.avg_exps[self.cond][loc].items()
         }
-        self.t_marker = self.rec_ax.plot(
+        t_marker = ax.plot(
             [self.rec_xaxis[self.t_idx] for _ in range(2)],
             [ymin, ymax],
             linestyle="--",
             c="black",
         )[0]
+        ax.legend()
+        return lines, t_marker
+
+    def build_term_vm_ax(self):
+        self.term_vm_lines, self.term_vm_t_marker = self.build_rec_ax(
+            self.term_vm_ax, "term", "v", -70, -40, "Time (ms)", "Terminal Voltage (mV)"
+        )
+
+    def build_gaba_g_ax(self):
+        self.gaba_g_lines, self.gaba_g_t_marker = self.build_rec_ax(
+            self.gaba_g_ax, "gaba", "g", 0, 0.0035, "Time (ms)", "GABA Conductance (μS)"
+        )
+
+    def build_bp_g_ax(self):
+        self.bp_g_lines, self.bp_g_t_marker = self.build_rec_ax(
+            self.bp_g_ax, "combined_bps", "g", 0, 0.001, "Time (ms)",
+            "Total BPC Conductance (μS)"
+        )
 
     def on_cond_slide(self, v):
         self.cond = self.conds[int(v)]
         self.cond_slide_ax.set_title("Condition = %s" % self.cond)
         self.update_scheme()
-        self.update_rec()
+        self.update_rec_axes()
 
     def on_vel_slide(self, v):
         self.vel_idx = int(v)
@@ -233,23 +273,31 @@ class SacSacAnimator:
             "Velocity = %.2f mm/s" % self.velocities[self.vel_idx]
         )
         self.update_scheme()
-        self.update_rec()
+        self.update_rec_axes()
 
     def on_time_slide(self, v):
         self.t_idx = nearest_index(self.rec_xaxis, v)
         self.update_scheme()
-        self.update_rec()
+        self.update_rec_axes()
 
     def connect_events(self):
         self.cond_slider.on_changed(self.on_cond_slide)
         self.vel_slider.on_changed(self.on_vel_slide)
         self.time_slider.on_changed(self.on_time_slide)
 
-    def update_rec(self):
-        for i, (n, line) in enumerate(self.term_lines.items()):
-            line.set_ydata(self.avg_exps[self.cond]["term"][n]["v"][self.vel_idx])
+    def update_rec(self, lines, t_marker, loc, rec_key):
+        end = (self.t_idx + 1) if self.reveal_time else self.n_pts
+        t_marker.set_xdata(self.rec_xaxis[self.t_idx])
+        for i, (n, line) in enumerate(lines.items()):
+            line.set_data(
+                self.rec_xaxis[:end],
+                self.avg_exps[self.cond][loc][n][rec_key][self.vel_idx][:end]
+            )
 
-        self.t_marker.set_xdata(self.rec_xaxis[self.t_idx])
+    def update_rec_axes(self):
+        self.update_rec(self.term_vm_lines, self.term_vm_t_marker, "term", "v")
+        self.update_rec(self.gaba_g_lines, self.gaba_g_t_marker, "gaba", "g")
+        self.update_rec(self.bp_g_lines, self.bp_g_t_marker, "combined_bps", "g")
 
     def update_scheme(self):
         ex = self.avg_exps[self.cond]
