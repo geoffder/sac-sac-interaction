@@ -69,9 +69,9 @@ class Sac:
         self.soma_nz_factor = 0  #.1
 
         self.bp_jitter = 0
-        self.bp_locs = {"prox": [5], "dist": [25, 45, 65]}
+        self.bp_locs = {"sust": [5], "trans": [25, 45, 65]}
         self.bp_props = {
-            "prox":
+            "sust":
                 {
                     "tau1": 10,  # excitatory conductance rise tau [ms]
                     "tau2": 60,  # excitatory conductance decay tau [ms]
@@ -79,7 +79,7 @@ class Sac:
                     "weight": .000275,  # weight of excitatory NetCons [uS] .00023
                     "delay": 0,
                 },
-            "dist":
+            "trans":
                 {
                     "tau1": .1,  # inhibitory conductance rise tau [ms]
                     "tau2": 12,  # inhibitory conductance decay tau [ms]
@@ -87,6 +87,31 @@ class Sac:
                     "weight": .000495,  # weight of inhibitory NetCons [uS]
                     "delay": 0,
                 }
+        }
+
+        self.loc_scaling = False
+        self.bp_loc_scaling = {
+            "sust": {
+                "weight": (lambda loc, w: w * 1),
+                "tau2": (lambda loc, t2: t2 * 1),
+            },
+            "trans":
+                {
+                    "weight": (lambda loc, w: w * 1),
+                    "tau2": (lambda loc, t2: t2 * 1),
+                },
+        }
+
+        self.vel_scaling = False
+        self.bp_vel_scaling = {
+            "sust": {
+                "weight": (lambda v, w: w * 1),
+                "tau2": (lambda v, t2: t2 * 1),
+            },
+            "trans": {
+                "weight": (lambda v, w: w * 1),
+                "tau2": (lambda v, t2: t2 * 1),
+            },
         }
 
         self.gaba_props = {
@@ -162,22 +187,23 @@ class Sac:
         self.dend.push()
         # create *named* hoc objects for each synapse (for gui compatibility)
         h(
-            "objref prox_bps_%s[%i], dist_bps_%s[%i]" %
-            (self.name, len(self.bp_locs["prox"]), self.name, len(self.bp_locs["dist"]))
+            "objref sust_bps_%s[%i], trans_bps_%s[%i]" %
+            (self.name, len(self.bp_locs["sust"]), self.name, len(self.bp_locs["trans"]))
         )
 
         # complete synapses are made up of a NetStim, Syn, and NetCon
         self.bps = {
-            "prox": {
+            "sust": {
                 "stim": [],
-                "syn": getattr(h, "prox_bps_%s" % self.name),
+                "syn": getattr(h, "sust_bps_%s" % self.name),
                 "con": []
             },
-            "dist": {
-                "stim": [],
-                "syn": getattr(h, "dist_bps_%s" % self.name),
-                "con": []
-            },
+            "trans":
+                {
+                    "stim": [],
+                    "syn": getattr(h, "trans_bps_%s" % self.name),
+                    "con": []
+                },
         }
 
         for (k, syns), locs, props in zip(
@@ -420,6 +446,33 @@ class Runner:
 
         return data
 
+    def loc_scale_bps(self):
+        for n, sac in self.model.sacs.items():
+            for props, locs, scaling, bps in zip(
+                sac.bp_props.values(), sac.bp_locs.values(), sac.bp_loc_scaling.values(),
+                sac.bps.values()
+            ):
+                for loc, syn in zip(locs, bps["syn"]):
+                    syn.weight[0] = scaling["weight"](loc, props["weight"])
+                    syn.tau2 = scaling["tau2"](loc, props["tau2"])
+
+    def vel_scale_bps(self, vel):
+        for n, sac in self.model.sacs.items():
+            for props, locs, scaling, bps in zip(
+                sac.bp_props.values(), sac.bp_vel_scaling.values(), sac.bps.values()
+            ):
+                for syn in bps["syn"]:
+                    syn.weight[0] = scaling["weight"](vel, props["weight"])
+                    syn.tau2 = scaling["tau2"](vel, props["tau2"])
+
+    def unscale_bps(self):
+        for n, sac in self.model.sacs.items():
+            for props, bps in zip(sac.bp_props.values(), sac.bps.values()):
+                for loc, syn in bps["syn"]:
+                    syn.weight[0] = props["weight"]
+                    syn.tau1 = props["tau1"]
+                    syn.tau2 = props["tau2"]
+
     def remove_gaba(self):
         if self.orig_gaba_weights is None:
             self.orig_gaba_weights = {}
@@ -441,7 +494,7 @@ class Runner:
         if self.orig_bp_props is None:
             self.orig_bp_props = {}
             for n, sac in self.model.sacs.items():
-                self.orig_bp_props[n] = sac.bp_props.copy()
+                self.orig_bp_props[n] = deepcopy(sac.bp_props)
                 sac.bp_props = {k: {**v, **taus} for k, v in sac.bp_props.items()}
                 for bps in sac.bps.values():
                     for syn in bps["syn"]:
@@ -451,7 +504,7 @@ class Runner:
     def restore_bps(self):
         if self.orig_bp_props is not None:
             for n, sac in self.model.sacs.items():
-                sac.bp_props = deepcopy(self.orig_bp_props)
+                sac.bp_props = deepcopy(self.orig_bp_props[n])
                 for bps, props in zip(sac.bps.values(), sac.bp_props.values()):
                     for syn in bps["syn"]:
                         syn.tau1 = props["tau1"]
