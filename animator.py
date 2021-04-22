@@ -2,11 +2,12 @@ import os
 import h5py as h5
 import json
 
-import numpy as np  # arrays
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.widgets import TextBox, Slider
 from matplotlib import cm
+from matplotlib.animation import FuncAnimation
 
 # local imports (found in this repo)
 from utils import *
@@ -145,10 +146,11 @@ class SacSacAnimator:
                             (bp.get_height() +
                              y_off) if self.model_params[n]["forward"] else (-2 - y_off)
                         ),
-                        k,
+                        "S" if k == "sust" else "T",
+                        fontsize=12,
                     )
 
-    def build_animation_fig(self, **plot_kwargs):
+    def build_interactive_fig(self, **plot_kwargs):
         if hasattr(self, "fig"):
             del (self.fig, self.ax, self.cond_slider, self.vel_slider, self.time_slider)
         if "gridspec_kw" not in plot_kwargs:
@@ -340,3 +342,46 @@ class SacSacAnimator:
                             (maxs["bps"][k][i]["g"] + .00001)
                         )
                     )
+
+    def build_animation_fig(self, **plot_kwargs):
+        if hasattr(self, "fig"):
+            del (self.fig, self.ax, self.cond_slider, self.vel_slider, self.time_slider)
+        if "gridspec_kw" not in plot_kwargs:
+            plot_kwargs["gridspec_kw"] = {
+                "height_ratios": [.25, .25, .25, .25],
+                "hspace": .2
+            }
+        self.fig, self.ax = plt.subplots(4, **plot_kwargs)
+        (self.scheme_ax, self.bp_g_ax, self.gaba_g_ax, self.term_vm_ax) = self.ax
+        self.build_term_vm_ax()
+        self.build_gaba_g_ax()
+        self.build_bp_g_ax()
+        self.build_scheme_ax()
+        self.update_rec_axes()
+        self.update_scheme()
+        return self.fig, self.ax
+
+    def play_velocity_exp(self, cond):
+        pass
+
+    def create_vel_gifs(self, out_path, n_frames, vel_idx=0, dt=10, dpi=100, gif_step=30):
+        os.makedirs(out_path, exist_ok=True)
+        self.term_vm_ax.set_xlim(0, n_frames * dt)
+        self.vel_idx = vel_idx
+
+        def update(t):
+            self.t_idx = nearest_index(self.rec_xaxis, t)
+            self.update_rec_axes()
+            self.update_scheme()
+
+        for cond in self.avg_exps.keys():
+            self.cond = cond
+            anim = FuncAnimation(
+                self.fig, update, frames=np.arange(n_frames) * dt, interval=gif_step
+            )
+            name = os.path.join(
+                out_path, "%s_vel%.2f.gif" % (cond, self.velocities[vel_idx])
+            )
+            anim.save(name, dpi=dpi, writer="imagemagick")
+
+        self.term_vm_ax.set_xlim(0, self.rec_xaxis.max())
