@@ -433,10 +433,12 @@ class Runner:
             for i in range(n_vels):
                 print("%.2f" % velocities[i], end=" ", flush=True)
                 self.light_bar["speed"] = velocities[i]
+                self.scale_bps(velocities[i])
                 self.run(self.light_bar, 3)  # index of 0 degrees
 
             print("")  # next line
 
+        self.unscale_bps()
         data = {
             "model_params": json.dumps(model_params),
             "exp_params": json.dumps(exp_params),
@@ -446,24 +448,23 @@ class Runner:
 
         return data
 
-    def loc_scale_bps(self):
+    def scale_bps(self, vel):
         for n, sac in self.model.sacs.items():
             for props, locs, scaling, bps in zip(
                 sac.bp_props.values(), sac.bp_locs.values(), sac.bp_loc_scaling.values(),
                 sac.bps.values()
             ):
                 for loc, syn in zip(locs, bps["syn"]):
-                    syn.weight[0] = scaling["weight"](loc, props["weight"])
-                    syn.tau2 = scaling["tau2"](loc, props["tau2"])
-
-    def vel_scale_bps(self, vel):
-        for n, sac in self.model.sacs.items():
-            for props, locs, scaling, bps in zip(
-                sac.bp_props.values(), sac.bp_vel_scaling.values(), sac.bps.values()
-            ):
-                for syn in bps["syn"]:
-                    syn.weight[0] = scaling["weight"](vel, props["weight"])
-                    syn.tau2 = scaling["tau2"](vel, props["tau2"])
+                    w = props["weight"]
+                    t2 = props["tau2"]
+                    if self.loc_scaling:
+                        w = scaling["weight"](loc, w)
+                        t2 = scaling["tau2"](loc, t2)
+                    if self.vel_scaling:
+                        w = scaling["weight"](vel, w)
+                        t2 = scaling["tau2"](vel, t2)
+                    syn.weight[0] = w
+                    syn.tau2 = t2
 
     def unscale_bps(self):
         for n, sac in self.model.sacs.items():
