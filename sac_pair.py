@@ -91,27 +91,34 @@ class Sac:
 
         self.loc_scaling = False
         self.bp_loc_scaling = {
-            "sust": {
-                "weight": (lambda loc, w: w * 1),
-                "tau2": (lambda loc, t2: t2 * 1),
-            },
+            "sust":
+                {
+                    "weight": (lambda loc, w: w),
+                    "tau1": (lambda loc, t1: t1),
+                    "tau2": (lambda loc, t2: t2),
+                },
             "trans":
                 {
-                    "weight": (lambda loc, w: w * 1),
-                    "tau2": (lambda loc, t2: t2 * 1),
+                    "weight": (lambda loc, w: w),
+                    "tau1": (lambda loc, t1: t1),
+                    "tau2": (lambda loc, t2: t2),
                 },
         }
 
         self.vel_scaling = False
         self.bp_vel_scaling = {
-            "sust": {
-                "weight": (lambda v, w: w * 1),
-                "tau2": (lambda v, t2: t2 * 1),
-            },
-            "trans": {
-                "weight": (lambda v, w: w * 1),
-                "tau2": (lambda v, t2: t2 * 1),
-            },
+            "sust":
+                {
+                    "weight": (lambda v, w: w - (np.clip(v / 4, 0, 1) * w * .5)),
+                    "tau1": (lambda v, t1: t1),
+                    "tau2": (lambda v, t2: t2),
+                },
+            "trans":
+                {
+                    "weight": (lambda v, w: w - (np.clip(v / 4, 0, 1) * w * .5)),
+                    "tau1": (lambda v, t1: t1),
+                    "tau2": (lambda v, t2: t2),
+                },
         }
 
         self.gaba_props = {
@@ -132,7 +139,9 @@ class Sac:
     def get_params_dict(self):
         params = self.__dict__.copy()
         # remove the non-param entries (model objects)
-        for key in ["soma", "dend", "term", "bps", "rand"]:
+        for key in [
+            "soma", "dend", "term", "bps", "rand", "bp_loc_scaling", "bp_vel_scaling"
+        ]:
             params.pop(key)
         return params
 
@@ -144,7 +153,8 @@ class Sac:
         soma.nseg = self.soma_nseg
         soma.Ra = self.soma_ra
 
-        soma.insert('HHst')
+        soma.insert("HHst")
+        soma.insert("cad")
         soma.gnabar_HHst = self.soma_na
         soma.gkbar_HHst = self.soma_k
         soma.gkmbar_HHst = self.soma_km
@@ -161,7 +171,8 @@ class Sac:
             s.nseg = self.dend_nseg
             s.Ra = self.dend_ra
             s.diam = self.dend_diam
-            s.insert('HHst')
+            s.insert("HHst")
+            s.insert("cad")
             s.gnabar_HHst = self.dend_na
             s.gkbar_HHst = self.dend_k
             s.gkmbar_HHst = self.dend_km
@@ -324,7 +335,7 @@ class SacPair:
         for pre, post in [("a", "b"), ("b", "a")]:
             sac = self.sacs[pre]
             sac.term.push()
-            self.gaba_syns[pre]["conn"] = h.NetCon(
+            self.gaba_syns[pre]["con"] = h.NetCon(
                 sac.term(1)._ref_v,
                 self.gaba_syns[post]["syn"],
                 sac.gaba_props["thresh"],
@@ -396,8 +407,17 @@ class Runner:
         params = self.__dict__.copy()
         # remove the non-param entries (model objects)
         for key in [
-            "model", "recs", "data", "dir_labels", "dir_rads", "dirs", "dir_inds",
-            "circle", "empty_data", "orig_gaba_weights", "orig_bp_props"
+            "model",
+            "recs",
+            "data",
+            "dir_labels",
+            "dir_rads",
+            "dirs",
+            "dir_inds",
+            "circle",
+            "empty_data",
+            "orig_gaba_weights",
+            "orig_bp_props",
         ]:
             params.pop(key)
         return params
@@ -450,29 +470,33 @@ class Runner:
 
     def scale_bps(self, vel):
         for n, sac in self.model.sacs.items():
-            for props, locs, scaling, bps in zip(
+            for props, locs, loc_scale, vel_scale, bps in zip(
                 sac.bp_props.values(), sac.bp_locs.values(), sac.bp_loc_scaling.values(),
-                sac.bps.values()
+                sac.bp_vel_scaling.values(), sac.bps.values()
             ):
-                for loc, syn in zip(locs, bps["syn"]):
+                for i, loc in enumerate(locs):
                     w = props["weight"]
+                    t1 = props["tau1"]
                     t2 = props["tau2"]
-                    if self.loc_scaling:
-                        w = scaling["weight"](loc, w)
-                        t2 = scaling["tau2"](loc, t2)
-                    if self.vel_scaling:
-                        w = scaling["weight"](vel, w)
-                        t2 = scaling["tau2"](vel, t2)
-                    syn.weight[0] = w
-                    syn.tau2 = t2
+                    if sac.loc_scaling:
+                        w = loc_scale["weight"](loc, w)
+                        t1 = loc_scale["tau1"](loc, t1)
+                        t2 = loc_scale["tau2"](loc, t2)
+                    if sac.vel_scaling:
+                        w = vel_scale["weight"](vel, w)
+                        t1 = vel_scale["tau1"](vel, t1)
+                        t2 = vel_scale["tau2"](vel, t2)
+                    bps["con"][i].weight[0] = w
+                    bps["syn"][i].tau1 = t1
+                    bps["syn"][i].tau2 = t2
 
     def unscale_bps(self):
         for n, sac in self.model.sacs.items():
             for props, bps in zip(sac.bp_props.values(), sac.bps.values()):
-                for loc, syn in bps["syn"]:
-                    syn.weight[0] = props["weight"]
-                    syn.tau1 = props["tau1"]
-                    syn.tau2 = props["tau2"]
+                for i in range(len(bps["syn"])):
+                    bps["con"][i].weight[0] = props["weight"]
+                    bps["syn"][i].tau1 = props["tau1"]
+                    bps["syn"][i].tau2 = props["tau2"]
 
     def remove_gaba(self):
         if self.orig_gaba_weights is None:
@@ -481,14 +505,14 @@ class Runner:
                 ), syn in zip(self.model.sacs.items(), self.model.gaba_syns.values()):
                 self.orig_gaba_weights[n] = sac.gaba_props["weight"]
                 sac.gaba_props["weight"] = 0
-                syn["conn"].weight[0] = 0
+                syn["con"].weight[0] = 0
 
     def restore_gaba(self):
         if self.orig_gaba_weights is not None:
             for (n, sac
                 ), syn in zip(self.model.sacs.items(), self.model.gaba_syns.values()):
                 sac.gaba_props["weight"] = self.orig_gaba_weights[n]
-                syn["conn"].weight[0] = self.orig_gaba_weights[n]
+                syn["con"].weight[0] = self.orig_gaba_weights[n]
             self.orig_gaba_weights = None
 
     def unify_bps(self, taus):
@@ -552,6 +576,7 @@ class Runner:
                 self.recs[p][n] = {
                     "v": h.Vector(),
                     "ica": h.Vector(),
+                    "cai": h.Vector(),
                 }
                 self.data[p][n] = {k: [] for k in self.recs[p][n].keys()}
                 for k, vec in self.recs[p][n].items():
