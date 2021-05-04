@@ -6,7 +6,7 @@ import h5py as h5
 import json
 from copy import deepcopy
 
-import numpy as np  # arrays
+import numpy as np
 import matplotlib.pyplot as plt
 
 from utils import *

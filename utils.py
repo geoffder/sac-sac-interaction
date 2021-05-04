@@ -4,6 +4,7 @@ import h5py as h5
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
+from scipy import interpolate
 
 
 def nrn_section(name):
@@ -190,3 +191,17 @@ def stack_pair_data(exp):
         }
         for cond, ex in exp.items()
     }
+
+
+def inverse_transform(x, y):
+    """Generate a sampling function from a distribution that recreates the relationship
+    between the given x and y vectors. Since this method assumes the underlying data is
+    actually a distribution, with x representing bin edges, an additional 0 edge will be
+    added before the first position. Additionally, the y vector is normalized such that it
+    sums to 1, so that probability can be distributed properly across the range.
+    """
+    x = np.concatenate([[0], x])
+    cum = np.zeros(len(x))
+    cum[1:] = np.cumsum(y / np.sum(y))
+    inv_cdf = interpolate.interp1d(cum, x)
+    return inv_cdf
