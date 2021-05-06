@@ -539,7 +539,7 @@ class Runner:
     def velocity_mechanism_run(
         self,
         velocities=[.1, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2],
-        n_trials=1,
+        mech_trials=1,
         uniform_props={
             "tau1": 1,
             "tau2": 12,
@@ -547,24 +547,38 @@ class Runner:
     ):
         data = {}
         print("Control run:")
-        data["control"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
+        data["control"] = self.velocity_run(velocities=velocities, n_trials=mech_trials)
 
         print("No GABA run:")
         self.remove_gaba()
-        data["no_gaba"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
+        data["no_gaba"] = self.velocity_run(velocities=velocities, n_trials=mech_trials)
         self.restore_gaba()
 
         print("Uniform Bipolar run:")
         self.unify_bps(uniform_props)
-        data["uniform"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
+        data["uniform"] = self.velocity_run(velocities=velocities, n_trials=mech_trials)
         self.restore_bps()
 
         print("No Mechanism run:")
         self.remove_gaba()
         self.unify_bps(uniform_props)
-        data["no_mechs"] = self.velocity_run(velocities=velocities, n_trials=n_trials)
+        data["no_mechs"] = self.velocity_run(velocities=velocities, n_trials=mech_trials)
         self.restore_gaba()
         self.restore_bps()
+
+        return data
+
+    def bp_distribution_run(self, distributions, dist_trials=1, **velocity_kwargs):
+        n_bps = {k: len(locs) for k, locs in self.model.sacs["a"].bp_locs.items()}
+        data = {}
+        for i in range(dist_trials):
+            for sac in self.model.sacs.values():
+                sac.bp_locs = {
+                    k: dist(np.random.uniform(size=n_bps[k])).tolist()
+                    for k, dist in distributions.items()
+                }
+                sac.calc_xy_locs()
+            data[i] = self.velocity_mechanism_run(**velocity_kwargs)
 
         return data
 
