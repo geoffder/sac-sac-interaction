@@ -205,3 +205,13 @@ def inverse_transform(x, y):
     cum[1:] = np.cumsum(y / np.sum(y))
     inv_cdf = interpolate.interp1d(cum, x)
     return inv_cdf
+
+
+def find_rise_start(arr, step=10):
+    peak_idx = np.argmax(arr)
+
+    def rec(last_min, idx):
+        min_idx = np.argmin(arr[idx - step:idx]) + idx - step
+        return rec(arr[min_idx], min_idx) if arr[min_idx] < last_min else idx
+
+    return rec(arr[peak_idx], peak_idx)
