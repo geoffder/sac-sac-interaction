@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from scipy import interpolate
+import symfit as sf
 
 
 def nrn_section(name):
@@ -215,3 +216,52 @@ def find_rise_start(arr, step=10):
         return rec(arr[min_idx], min_idx) if arr[min_idx] < last_min else idx
 
     return rec(arr[peak_idx], peak_idx)
+
+
+class BiexpFitter:
+    def __init__(self, est_tau1, est_tau2, amp=1., norm_amp=False):
+        self.a0 = amp
+        self.b0 = amp
+        self.norm_amp = norm_amp
+        a, b, g, t = sf.variables("a, b, g, t")
+        tau1 = sf.Parameter("tau1", est_tau1)
+        tau2 = sf.Parameter("tau2", est_tau2)
+        self.ode_model = sf.ODEModel(
+            {
+                sf.D(a, t): -a / tau1,
+                sf.D(b, t): -b / tau2,
+            },
+            initial={
+                t: 0,
+                a: amp,
+                b: amp
+            },
+        )
+        self.model = sf.CallableNumericalModel(
+            {g: self.g_func}, connectivity_mapping={g: {t, tau1, tau2}}
+        )
+        self.constraints = [
+            sf.GreaterThan(tau1, 0.001),
+            sf.GreaterThan(tau2, tau1),
+        ]
+
+    def g_func(self, t, tau1, tau2):
+        res = self.ode_model(t=t, tau1=tau1, tau2=tau2)
+        g = res.b - res.a
+        gmax = np.max(g)
+        if self.norm_amp and not np.isclose(gmax, 0.):
+            # return g * 1 / (np.max(g) + 0.00000001)
+            return g * 1 / np.max(g)
+        else:
+            # tp = (tau1 * tau2) / (tau2 - tau1) * np.log(tau2 / tau1)
+            # factor = 1 / (-np.exp(-tp / tau1) + np.exp(-tp / tau2))
+            # return g * factor
+            return g
+
+    def fit(self, x, y):
+        self.results = sf.Fit(self.model, t=x, g=y,
+                              constraints=self.constraints).execute()
+        return self.results
+
+    def calc_g(self, x):
+        return self.model(t=x, **self.results.params)[0]
