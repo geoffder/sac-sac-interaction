@@ -544,27 +544,40 @@ class Runner:
             "tau1": 1,
             "tau2": 12,
         },
+        conds={"control", "no_gaba", "uniform", "no_mech"}
     ):
         data = {}
-        print("Control run:")
-        data["control"] = self.velocity_run(velocities=velocities, n_trials=mech_trials)
+        if "control" in conds:
+            print("Control run:")
+            data["control"] = self.velocity_run(
+                velocities=velocities, n_trials=mech_trials
+            )
 
-        print("No GABA run:")
-        self.remove_gaba()
-        data["no_gaba"] = self.velocity_run(velocities=velocities, n_trials=mech_trials)
-        self.restore_gaba()
+        if "no_gaba" in conds:
+            print("No GABA run:")
+            self.remove_gaba()
+            data["no_gaba"] = self.velocity_run(
+                velocities=velocities, n_trials=mech_trials
+            )
+            self.restore_gaba()
 
-        print("Uniform Bipolar run:")
-        self.unify_bps(uniform_props)
-        data["uniform"] = self.velocity_run(velocities=velocities, n_trials=mech_trials)
-        self.restore_bps()
+        if "uniform" in conds:
+            print("Uniform Bipolar run:")
+            self.unify_bps(uniform_props)
+            data["uniform"] = self.velocity_run(
+                velocities=velocities, n_trials=mech_trials
+            )
+            self.restore_bps()
 
-        print("No Mechanism run:")
-        self.remove_gaba()
-        self.unify_bps(uniform_props)
-        data["no_mechs"] = self.velocity_run(velocities=velocities, n_trials=mech_trials)
-        self.restore_gaba()
-        self.restore_bps()
+        if "no_mech" in conds:
+            print("No Mechanism run:")
+            self.remove_gaba()
+            self.unify_bps(uniform_props)
+            data["no_mechs"] = self.velocity_run(
+                velocities=velocities, n_trials=mech_trials
+            )
+            self.restore_gaba()
+            self.restore_bps()
 
         return data
 
