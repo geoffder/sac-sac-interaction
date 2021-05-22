@@ -218,6 +218,17 @@ def find_rise_start(arr, step=10):
     return rec(arr[peak_idx], peak_idx)
 
 
+def find_rise_bsln(arr, bsln_pts=1000, step=10):
+    peak_idx = np.argmax(arr)
+    bsln = np.mean(arr[:bsln_pts])
+
+    def rec(idx):
+        min_idx = np.argmin(arr[idx - step:idx]) + idx - step
+        return rec(min_idx) if arr[min_idx] > bsln else idx
+
+    return rec(peak_idx)
+
+
 class BiexpFitter:
     def __init__(self, est_tau1, est_tau2, amp=1., norm_amp=False):
         self.a0 = amp
@@ -226,36 +237,47 @@ class BiexpFitter:
         a, b, g, t = sf.variables("a, b, g, t")
         tau1 = sf.Parameter("tau1", est_tau1)
         tau2 = sf.Parameter("tau2", est_tau2)
+        y0 = sf.Parameter("y0", est_tau2)
+        y0.value = 1.
+        y0.min = 0.5
+        y0.max = 2.
         self.ode_model = sf.ODEModel(
             {
-                sf.D(a, t): -a / tau1,
-                sf.D(b, t): -b / tau2,
+                # sf.D(a, t): -a / tau1,
+                # sf.D(b, t): -b / tau2,
+                # HACK: trick model into fitting an initial value (always 1)
+                # https://stackoverflow.com/questions/49149241/ode-fitting-with-symfit-for-python-how-to-get-estimations-for-intial-values
+                sf.D(a, t):
+                    -a / tau1 * (sf.cos(y0)**2 + sf.sin(y0)**2),
+                sf.D(b, t):
+                    -b / tau2 * (sf.cos(y0)**2 + sf.sin(y0)**2),
             },
             initial={
                 t: 0,
-                a: amp,
-                b: amp
+                a: y0.value,
+                b: y0.value,
+                # a: amp,
+                # b: amp
             },
         )
         self.model = sf.CallableNumericalModel(
-            {g: self.g_func}, connectivity_mapping={g: {t, tau1, tau2}}
+            {g: self.g_func}, connectivity_mapping={g: {t, tau1, tau2, y0}}
         )
         self.constraints = [
-            sf.GreaterThan(tau1, 0.001),
+            sf.GreaterThan(tau1, 0.0001),
             sf.GreaterThan(tau2, tau1),
         ]
 
-    def g_func(self, t, tau1, tau2):
-        res = self.ode_model(t=t, tau1=tau1, tau2=tau2)
+    def g_func(self, t, tau1, tau2, y0):
+        res = self.ode_model(t=t, tau1=tau1, tau2=tau2, y0=y0)
         g = res.b - res.a
         gmax = np.max(g)
         if self.norm_amp and not np.isclose(gmax, 0.):
-            # return g * 1 / (np.max(g) + 0.00000001)
-            return g * 1 / np.max(g)
+            return g * 1 / gmax
         else:
             # tp = (tau1 * tau2) / (tau2 - tau1) * np.log(tau2 / tau1)
             # factor = 1 / (-np.exp(-tp / tau1) + np.exp(-tp / tau2))
-            # return g * factor
+            # return g + factor
             return g
 
     def fit(self, x, y):
@@ -265,3 +287,7 @@ class BiexpFitter:
 
     def calc_g(self, x):
         return self.model(t=x, **self.results.params)[0]
+
+
+def biexp(x, m, t1, t2, b):
+    return m * (np.exp(-t2 * x) - np.exp(-t1 * x)) + b
