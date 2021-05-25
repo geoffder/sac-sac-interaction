@@ -218,9 +218,9 @@ def find_rise_start(arr, step=10):
     return rec(arr[peak_idx], peak_idx)
 
 
-def find_rise_bsln(arr, bsln_pts=1000, step=10):
+def find_rise_bsln(arr, bsln_start=0, bsln_end=None, step=10):
     peak_idx = np.argmax(arr)
-    bsln = np.mean(arr[:bsln_pts])
+    bsln = np.mean(arr[bsln_start:bsln_end])
 
     def rec(idx):
         min_idx = np.argmin(arr[idx - step:idx]) + idx - step
