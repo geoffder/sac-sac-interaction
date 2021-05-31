@@ -323,20 +323,20 @@ class SacSacAnimator:
             s["soma"].set_color(
                 self.cmap(
                     (ex["soma"][n]["v"][self.vel_idx, self.t_idx] - mins["soma"]["v"]) /
-                    (maxs["soma"]["v"] - mins["soma"]["v"])
+                    (maxs["soma"]["v"] - mins["soma"]["v"] + 0.00001)
                 )
             )
             s["term"].set_color(
                 self.cmap(
                     (ex["term"][n]["v"][self.vel_idx, self.t_idx] - mins["term"]["v"]) /
-                    (maxs["term"]["v"] - mins["term"]["v"])
+                    (maxs["term"]["v"] - mins["term"]["v"] + 0.00001)
                 )
             )
             # GABA arrow coming from pre-synaptic side, so flip n
             s["gaba"].set_color(
                 self.cmap(
                     ex["gaba"]["b" if n == "a" else "a"]["g"][self.vel_idx, self.t_idx] /
-                    maxs["gaba"]["g"]
+                    (maxs["gaba"]["g"] + 0.00001)
                 )
             )
             for k, bps in s["bps"].items():
