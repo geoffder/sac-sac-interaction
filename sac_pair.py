@@ -375,6 +375,7 @@ class Runner:
         self.place_electrodes()
         self.orig_gaba_weights = None
         self.orig_bp_props = None
+        self.orig_bp_vel_scaling = None
 
     def set_hoc_params(self):
         """Set hoc NEURON environment model run parameters."""
@@ -418,6 +419,7 @@ class Runner:
             "empty_data",
             "orig_gaba_weights",
             "orig_bp_props",
+            "orig_bp_vel_scaling",
         ]:
             params.pop(key)
         return params
@@ -518,9 +520,12 @@ class Runner:
     def unify_bps(self, taus):
         if self.orig_bp_props is None:
             self.orig_bp_props = {}
+            self.orig_bp_vel_scaling = {}
             for n, sac in self.model.sacs.items():
                 self.orig_bp_props[n] = deepcopy(sac.bp_props)
+                self.orig_bp_vel_scaling[n] = deepcopy(sac.bp_vel_scaling)
                 sac.bp_props = {k: {**v, **taus} for k, v in sac.bp_props.items()}
+                sac.bp_vel_scaling["sust"] = sac.bp_vel_scaling["trans"]
                 for bps in sac.bps.values():
                     for syn in bps["syn"]:
                         syn.tau1 = taus["tau1"]
@@ -530,11 +535,12 @@ class Runner:
         if self.orig_bp_props is not None:
             for n, sac in self.model.sacs.items():
                 sac.bp_props = deepcopy(self.orig_bp_props[n])
+                sac.bp_vel_scaling = deepcopy(self.orig_bp_vel_scaling[n])
                 for bps, props in zip(sac.bps.values(), sac.bp_props.values()):
                     for syn in bps["syn"]:
                         syn.tau1 = props["tau1"]
                         syn.tau2 = props["tau2"]
-            self.orig_bp_props = None
+            self.orig_bp_props, self.orig_bp_vel_scaling = None, None
 
     def velocity_mechanism_run(
         self,
