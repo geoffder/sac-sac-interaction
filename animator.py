@@ -249,12 +249,17 @@ class SacSacAnimator:
 
     def build_term_vm_ax(self):
         self.term_vm_lines, self.term_vm_t_marker = self.build_rec_ax(
-            self.term_vm_ax, "term", "v", -70, -40, "Time (ms)", "Terminal Voltage (mV)"
+            self.term_vm_ax, "term", "v", -70, -35, "Time (ms)", "Terminal Voltage (mV)"
         )
 
     def build_gaba_g_ax(self):
         self.gaba_g_lines, self.gaba_g_t_marker = self.build_rec_ax(
-            self.gaba_g_ax, "gaba", "g", 0, 0.0035, ylbl="GABA Conductance (μS)"
+            self.gaba_g_ax,
+            "gaba",
+            "g",
+            0,
+            self.max_exps[self.cond]["gaba"]["g"],
+            ylbl="GABA Conductance (μS)"
         )
         self.gaba_g_ax.set_xticklabels([])
         self.gaba_g_ax._shared_x_axes.join(self.gaba_g_ax, self.term_vm_ax)
@@ -265,7 +270,7 @@ class SacSacAnimator:
             "combined_bps",
             "g",
             0,
-            0.001,
+            self.max_exps[self.cond]["combined_bps"]["g"],
             ylbl="Total BPC Conductance (μS)"
         )
         self.bp_g_ax.set_xticklabels([])
