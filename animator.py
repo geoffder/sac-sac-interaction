@@ -155,13 +155,13 @@ class SacSacAnimator:
             del (self.fig, self.ax, self.cond_slider, self.vel_slider, self.time_slider)
         if "gridspec_kw" not in plot_kwargs:
             plot_kwargs["gridspec_kw"] = {
-                "height_ratios": [.225, .033, .033, .033, .225, .225, .225],
+                "height_ratios": [.18, .033, .033, .033, .18, .18, .18, .18],
                 "hspace": .65
             }
-        self.fig, self.ax = plt.subplots(7, **plot_kwargs)
+        self.fig, self.ax = plt.subplots(8, **plot_kwargs)
         (
             self.scheme_ax, self.cond_slide_ax, self.vel_slide_ax, self.time_slide_ax,
-            self.bp_g_ax, self.gaba_g_ax, self.term_vm_ax
+            self.bp_g_ax, self.gaba_g_ax, self.term_cai_ax, self.term_vm_ax
         ) = self.ax
         self.build_cond_slide_ax()
         self.build_vel_slide_ax()
@@ -169,6 +169,7 @@ class SacSacAnimator:
         self.build_term_vm_ax()
         self.build_gaba_g_ax()
         self.build_bp_g_ax()
+        self.build_term_cai_ax()
         self.build_scheme_ax()
         self.update_rec_axes()
         self.update_scheme()
@@ -276,6 +277,18 @@ class SacSacAnimator:
         self.bp_g_ax.set_xticklabels([])
         self.bp_g_ax._shared_x_axes.join(self.bp_g_ax, self.term_vm_ax)
 
+    def build_term_cai_ax(self):
+        self.term_cai_lines, self.term_cai_t_marker = self.build_rec_ax(
+            self.term_cai_ax,
+            "term",
+            "cai",
+            0,
+            self.max_exps[self.cond]["term"]["cai"],
+            ylbl="Terminal [Ca2+] (mM)"
+        )
+        self.term_cai_ax.set_xticklabels([])
+        self.term_cai_ax._shared_x_axes.join(self.term_cai_ax, self.term_vm_ax)
+
     def on_cond_slide(self, v):
         self.cond = self.conds[int(v)]
         self.cond_slide_ax.set_title("Condition = %s" % self.cond)
@@ -311,6 +324,7 @@ class SacSacAnimator:
 
     def update_rec_axes(self):
         self.update_rec(self.term_vm_lines, self.term_vm_t_marker, "term", "v")
+        self.update_rec(self.term_cai_lines, self.term_cai_t_marker, "term", "cai")
         self.update_rec(self.gaba_g_lines, self.gaba_g_t_marker, "gaba", "g")
         self.update_rec(self.bp_g_lines, self.bp_g_t_marker, "combined_bps", "g")
 
@@ -361,6 +375,7 @@ class SacSacAnimator:
         self.build_term_vm_ax()
         self.build_gaba_g_ax()
         self.build_bp_g_ax()
+        self.build_term_cai_ax()
         self.build_scheme_ax()
         self.update_rec_axes()
         self.update_scheme()
