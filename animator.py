@@ -46,7 +46,7 @@ class SacSacAnimator:
         self.bp_offset, self.bp_width, self.bp_height = bp_offset, bp_width, bp_height
         self.reveal_time = reveal_time
         self.schemes = self.build_schemes()
-        self.cond = "control"
+        self.cond = list(self.exps.keys())[0]
         self.vel_idx = 0
         self.t_idx = 0
         self.rec_xaxis = np.arange(
@@ -71,11 +71,12 @@ class SacSacAnimator:
                 "dend":
                     patches.Rectangle(
                         (
-                            ps["dend_x_origin"] -
-                            (ps["dend_l"] if not ps["forward"] else 0), ps["origin"][1] -
-                            (ps["dend_diam"] / 2) + self.y_off[n]
+                            ps["initial_dend_x_origin"] - (
+                                (ps["dend_l"] +
+                                 ps["initial_dend_l"]) if not ps["forward"] else 0
+                            ), ps["origin"][1] - (ps["dend_diam"] / 2) + self.y_off[n]
                         ),
-                        ps["dend_l"],
+                        ps["dend_l"] + ps["initial_dend_l"],
                         1,  # ps["dend_diam"],
                         fill=True,
                     ),
