@@ -30,39 +30,50 @@ class Sac:
         self.origin = (0, 0)
 
         # soma physical properties
-        self.soma_l = 10
-        self.soma_diam = 10
+        self.soma_l = 7
+        self.soma_diam = 7
         self.soma_nseg = 1
         self.soma_ra = 100
 
         # dendrite physical properties
         self.dend_nseg = 25
         self.seg_step = 1 / self.dend_nseg
-        self.dend_diam = .5
-        self.dend_l = 150
+        self.dend_diam = .2
+        self.initial_dend_diam = 0.4
+        self.initial_dend_l = 10
+        self.dend_l = 130
         self.term_l = 10
         self.dend_ra = 100
 
         # soma active properties
         self.soma_na = .0  # [S/cm2]
         self.soma_k = .005  # [S/cm2]
-        self.soma_km = .001  # [S/cm2]
+        self.soma_km = 0.  # [S/cm2]
 
-        self.dend_cat = .0003
-        self.dend_cal = .0003
         self.soma_gleak_hh = .0001667  # [S/cm2]
-        self.soma_eleak_hh = -70.0  # [mV]
+        # self.soma_eleak_hh = -70.0  # [mV]
+        self.soma_eleak_hh = -54.4  # [mV]
         self.soma_gleak_pas = .0001667  # [S/cm2]
-        self.soma_eleak_pas = -70  # [mV]
 
         # dend compartment active properties
+        self.initial_k = .001  # [S/cm2]
+        self.initial_km = 0.  # [S/cm2]
+
+        self.dend_k = 0.
+        self.dend_km = 0.
         self.dend_na = .00  # [S/cm2] .03
-        self.dend_k = .003  # [S/cm2]
-        self.dend_km = .0004  # [S/cm2]
         self.dend_gleak_hh = 0.0001667  # [S/cm2]
-        self.dend_eleak_hh = -70.0  # [mV]
-        self.dend_gleak_pas = .0001667  # [S/cm2]
-        self.dend_eleak_pas = -70  # [mV]
+        # self.dend_eleak_hh = -70.0  # [mV]
+        self.dend_eleak_hh = -54.4  # [mV]
+
+        self.term_na = 0.
+        self.term_k = 0.  # [S/cm2]
+        self.term_km = 0.  # [S/cm2]
+        self.term_cat = .0003
+        self.term_cal = 0.
+        self.term_can = 0.0003
+        self.term_caq = 0.000006
+        self.term_cap = 0.0003
 
         # membrane noise
         self.dend_nz_factor = 0  #.1  # default NF_HHst = 1
@@ -126,7 +137,7 @@ class Sac:
             "thresh": -50,  # pre-synaptic release threshold
             "tau1": .5,  # inhibitory conductance rise tau [ms]
             "tau2": 60,  # inhibitory conductance decay tau [ms]
-            "rev": -70,  # inhibitory reversal potential [mV]
+            "rev": -60,  # inhibitory reversal potential [mV]
             "weight": .001,  # weight of inhibitory NetCons [uS]
             "delay": .5,
         }
@@ -140,7 +151,8 @@ class Sac:
         params = self.__dict__.copy()
         # remove the non-param entries (model objects)
         for key in [
-            "soma", "dend", "term", "bps", "rand", "bp_loc_scaling", "bp_vel_scaling"
+            "soma", "initial", "dend", "term", "bps", "rand", "bp_loc_scaling",
+            "bp_vel_scaling"
         ]:
             params.pop(key)
         return params
@@ -165,37 +177,62 @@ class Sac:
         return soma
 
     def create_dend(self):
+        initial = nrn_section("initial_%s" % (self.name))
         dend = nrn_section("dend_%s" % (self.name))
         term = nrn_section("term_%s" % (self.name))
-        for s in [dend, term]:
+
+        # shared properties
+        for s in [initial, dend, term]:
             s.nseg = self.dend_nseg
             s.Ra = self.dend_ra
-            s.diam = self.dend_diam
             s.insert("HHst")
-            s.insert("cad")
-            s.gnabar_HHst = self.dend_na
-            s.gkbar_HHst = self.dend_k
-            s.gkmbar_HHst = self.dend_km
-            s.gtbar_HHst = self.dend_cat
-            s.glbar_HHst = self.dend_cal
             s.gleak_HHst = self.dend_gleak_hh  # (S/cm2)
             s.eleak_HHst = self.dend_eleak_hh
             s.NF_HHst = self.dend_nz_factor
             s.seed_HHst = self.nz_seed
 
+        for s in [dend, term]:
+            s.diam = self.dend_diam
+
+        initial.diam = self.initial_dend_diam
+        initial.L = self.initial_dend_l
         dend.L = self.dend_l
-        dend.gtbar_HHst = 0
-        dend.glbar_HHst = 0
-        term.gtbar_HHst = self.dend_cat
-        term.glbar_HHst = self.dend_cal
         term.L = self.term_l
 
+        # turn off calcium and sodium everywhere but the terminal
+        for s in [initial, dend]:
+            s.gtbar_HHst = 0
+            s.glbar_HHst = 0
+            s.gnabar_HHst = 0
+
+        # non terminal potassium densities
+        initial.gkbar_HHst = self.initial_k
+        initial.gkmbar_HHst = self.initial_km
+        dend.gkbar_HHst = self.dend_k
+        dend.gkbar_HHst = self.dend_km
+        term.gkbar_HHst = self.term_k
+        term.gkbar_HHst = self.term_km
+
+        # terminal active properties
+        term.insert("cad")
+        term.insert("can")
+        # term.insert("CaQ")
+        term.insert("newCaP1")
+        # term.insert("canrgc")
+        term.gnabar_HHst = self.term_na
+        term.gtbar_HHst = self.term_cat
+        term.glbar_HHst = self.term_cal
+        term.gtbar_HHst = self.term_cat
+        term.glbar_HHst = self.term_cal
+        term.gcanbar_can = self.term_can
+        # term.pmax_CaQ = self.dend_caq
+        term.pcabar_newCaP1 = self.term_cap
+
+        dend.connect(initial)
         term.connect(dend)
-        return dend, term
+        return initial, dend, term
 
     def create_synapses(self):
-        # access hoc compartment
-        self.dend.push()
         # create *named* hoc objects for each synapse (for gui compatibility)
         h(
             "objref sust_bps_%s[%i], trans_bps_%s[%i]" %
@@ -221,9 +258,16 @@ class Sac:
             self.bps.items(), self.bp_locs.values(), self.bp_props.values()
         ):
             for i in range(len(locs)):
-                # 0 -> 1 position dendrite section
-                # obtain fractional position from distance to soma
-                pos = np.round(locs[i] / self.dend_l, decimals=5)
+                # access hoc compartment and calculate fractional position
+                # along dendritic section (0 -> 1)
+                if locs[i] <= self.initial_dend_l:
+                    self.initial.push()
+                    pos = np.round(locs[i] / self.initial_dend_l, decimals=5)
+                else:
+                    self.dend.push()
+                    pos = np.round(
+                        min(0, locs[i] - self.initial_dend_l) / self.dend_l, decimals=5
+                    )
 
                 # Synapse object (source of conductance)
                 syns["syn"][i] = h.Exp2Syn(pos)
@@ -256,16 +300,22 @@ class Sac:
         each bipolar cell from the soma. Dendrite origins are refer to the 0
         position of the section, meaning it extends from that in a different
         direction depending on the orientation of the SAC."""
-        total_l = self.dend_l + self.term_l
+        pre_term_l = self.initial_dend_l + self.dend_l
+        total_l = pre_term_l + self.term_l
         dir_sign = 1 if self.forward else -1
         o_x, o_y = self.origin
-        self.dend_x_origin = o_x + ((total_l + self.gaba_props["loc"]) / -2 * dir_sign)
-        self.term_x_origin = self.dend_x_origin + (self.dend_l * dir_sign)
-        self.soma_x_origin = self.dend_x_origin + (self.soma_l / 2 * dir_sign * -1)
-        self.gaba_x_loc = self.dend_x_origin + (total_l * dir_sign)
+        self.initial_dend_x_origin = o_x + (
+            (total_l + self.gaba_props["loc"]) / -2 * dir_sign
+        )
+        self.dend_x_origin = self.initial_dend_x_origin + (self.initial_dend_l * dir_sign)
+        self.term_x_origin = self.initial_dend_x_origin + (pre_term_l * dir_sign)
+        self.soma_x_origin = self.initial_dend_x_origin + (
+            self.soma_l / 2 * dir_sign * -1
+        )
+        self.gaba_x_loc = self.initial_dend_x_origin + (total_l * dir_sign)
         self.bp_xy_locs = {
             k: {
-                "x": [dir_sign * l + self.dend_x_origin for l in locs],
+                "x": [dir_sign * l + self.initial_dend_x_origin for l in locs],
                 "y": [o_y for _ in locs]
             }
             for k, locs in self.bp_locs.items()
@@ -275,8 +325,8 @@ class Sac:
     def create_neuron(self):
         # create compartments (using parameters in self.__dict__)
         self.soma = self.create_soma()
-        self.dend, self.term = self.create_dend()
-        self.dend.connect(self.soma)
+        self.initial, self.dend, self.term = self.create_dend()
+        self.initial.connect(self.soma)
         self.create_synapses()  # generate synapses on dendrite
 
     def rotate_sacs(self, rotation):
@@ -325,8 +375,14 @@ class SacPair:
     def wire_gaba(self):
         self.gaba_syns = {}
         for n, sac in self.sacs.items():
-            pos = np.round(sac.gaba_props["loc"] / sac.dend_l, decimals=5)
-            sac.dend.push()
+            if sac.gaba_props["loc"] < sac.initial_dend_l:
+                sac.initial.push()
+                pos = np.round(sac.gaba_props["loc"] / sac.initial_dend_l, decimals=5)
+            else:
+                sac.dend.push()
+                pos = np.round(
+                    (sac.gaba_props["loc"] - sac.initial_dend_l) / sac.dend_l, decimals=5
+                )
             self.gaba_syns[n] = {"syn": h.Exp2Syn(pos)}
             self.gaba_syns[n]["syn"].tau1 = sac.gaba_props["tau1"]
             self.gaba_syns[n]["syn"].tau2 = sac.gaba_props["tau2"]
@@ -367,7 +423,8 @@ class Runner:
         self.tstop = 4000  # [ms]
         self.steps_per_ms = 1  # [10 = 10kHz]
         self.dt = 1  # [ms, .1 = 10kHz]
-        self.v_init = -70
+        # self.v_init = -70
+        self.v_init = -60
         self.celsius = 36.9
         self.set_hoc_params()
 
@@ -587,15 +644,19 @@ class Runner:
 
         return data
 
-    def bp_distribution_run(self, distributions, dist_trials=1, **velocity_kwargs):
+    def bp_distribution_run(
+        self, distributions, dist_trials=1, mirror=False, **velocity_kwargs
+    ):
         n_bps = {k: len(locs) for k, locs in self.model.sacs["a"].bp_locs.items()}
         data = {}
         for i in range(dist_trials):
-            for sac in self.model.sacs.values():
-                sac.bp_locs = {
-                    k: dist(np.random.uniform(size=n_bps[k])).tolist()
-                    for k, dist in distributions.items()
-                }
+            for j, sac in enumerate(self.model.sacs.values()):
+                if not mirror or not j:
+                    locs = {
+                        k: dist(np.random.uniform(size=n_bps[k])).tolist()
+                        for k, dist in distributions.items()
+                    }
+                sac.bp_locs = locs
                 sac.calc_xy_locs()
             data[i] = self.velocity_mechanism_run(**velocity_kwargs)
 
