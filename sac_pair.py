@@ -53,7 +53,6 @@ class Sac:
         self.soma_gleak_hh = .0001667  # [S/cm2]
         # self.soma_eleak_hh = -70.0  # [mV]
         self.soma_eleak_hh = -54.4  # [mV]
-        self.soma_gleak_pas = .0001667  # [S/cm2]
 
         # dend compartment active properties
         self.initial_k = .001  # [S/cm2]
@@ -72,7 +71,6 @@ class Sac:
         self.term_cat = .0003
         self.term_cal = 0.
         self.term_can = 0.0003
-        self.term_caq = 0.000006
         self.term_cap = 0.0003
 
         # membrane noise
@@ -186,6 +184,7 @@ class Sac:
             s.nseg = self.dend_nseg
             s.Ra = self.dend_ra
             s.insert("HHst")
+            s.insert("cad")
             s.gleak_HHst = self.dend_gleak_hh  # (S/cm2)
             s.eleak_HHst = self.dend_eleak_hh
             s.NF_HHst = self.dend_nz_factor
@@ -209,23 +208,19 @@ class Sac:
         initial.gkbar_HHst = self.initial_k
         initial.gkmbar_HHst = self.initial_km
         dend.gkbar_HHst = self.dend_k
-        dend.gkbar_HHst = self.dend_km
+        dend.gkmbar_HHst = self.dend_km
         term.gkbar_HHst = self.term_k
-        term.gkbar_HHst = self.term_km
+        term.gkmbar_HHst = self.term_km
 
         # terminal active properties
-        term.insert("cad")
         term.insert("can")
-        # term.insert("CaQ")
         term.insert("newCaP1")
-        # term.insert("canrgc")
         term.gnabar_HHst = self.term_na
         term.gtbar_HHst = self.term_cat
         term.glbar_HHst = self.term_cal
         term.gtbar_HHst = self.term_cat
         term.glbar_HHst = self.term_cal
         term.gcanbar_can = self.term_can
-        # term.pmax_CaQ = self.dend_caq
         term.pcabar_newCaP1 = self.term_cap
 
         dend.connect(initial)
