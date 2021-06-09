@@ -194,6 +194,22 @@ def stack_pair_data(exp):
     }
 
 
+def linear_bp_sum(exp):
+    """Linearly (simple sum) combine all bipolar inputs in SAC-SAC experiments.
+    Output dict is in same structure as the input experiment, but the sole contents
+    are the summed conductances and currents for each SAC."""
+    return {
+        cond: {
+            n: {
+                m: np.sum([bp[m] for bps in sac.values() for bp in bps.values()], axis=0)
+                for m in ["g", "i"]
+            }
+            for n, sac in e["bps"].items()
+        }
+        for cond, e in exp.items()
+    }
+
+
 def inverse_transform(x, y):
     """Generate a sampling function from a distribution that recreates the relationship
     between the given x and y vectors. Since this method assumes the underlying data is
