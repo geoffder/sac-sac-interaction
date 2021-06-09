@@ -43,6 +43,7 @@ class Sac:
         self.initial_dend_l = 10
         self.dend_l = 130
         self.term_l = 10
+        self.term_diam = .2
         self.dend_ra = 100
 
         # soma active properties
@@ -190,12 +191,11 @@ class Sac:
             s.NF_HHst = self.dend_nz_factor
             s.seed_HHst = self.nz_seed
 
-        for s in [dend, term]:
-            s.diam = self.dend_diam
-
         initial.diam = self.initial_dend_diam
         initial.L = self.initial_dend_l
+        dend.diam = self.dend_diam
         dend.L = self.dend_l
+        term.diam = self.term_diam
         term.L = self.term_l
 
         # turn off calcium and sodium everywhere but the terminal
@@ -287,7 +287,7 @@ class Sac:
                     )
                 )
 
-        h.pop_section()  # remove section from access stack
+                h.pop_section()  # remove section from access stack
 
     def calc_xy_locs(self):
         """Origin of the arena is (0, 0), so the dendrite is positioned with
