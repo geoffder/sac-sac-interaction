@@ -156,18 +156,20 @@ class SacSacAnimator:
             del (self.fig, self.ax, self.cond_slider, self.vel_slider, self.time_slider)
         if "gridspec_kw" not in plot_kwargs:
             plot_kwargs["gridspec_kw"] = {
-                "height_ratios": [.18, .033, .033, .033, .18, .18, .18, .18],
+                "height_ratios": [.15, .033, .033, .033, .15, .15, .15, .15, .15],
                 "hspace": .65
             }
-        self.fig, self.ax = plt.subplots(8, **plot_kwargs)
+        self.fig, self.ax = plt.subplots(9, **plot_kwargs)
         (
             self.scheme_ax, self.cond_slide_ax, self.vel_slide_ax, self.time_slide_ax,
-            self.bp_g_ax, self.gaba_g_ax, self.term_cai_ax, self.term_vm_ax
+            self.bp_g_ax, self.gaba_g_ax, self.term_cai_ax, self.term_vm_ax,
+            self.soma_vm_ax
         ) = self.ax
         self.build_cond_slide_ax()
         self.build_vel_slide_ax()
         self.build_time_slide_ax()
         self.build_term_vm_ax()
+        self.build_soma_vm_ax()
         self.build_gaba_g_ax()
         self.build_bp_g_ax()
         self.build_term_cai_ax()
@@ -253,6 +255,13 @@ class SacSacAnimator:
         self.term_vm_lines, self.term_vm_t_marker = self.build_rec_ax(
             self.term_vm_ax, "term", "v", -70, -35, "Time (ms)", "Terminal Voltage (mV)"
         )
+        self.term_vm_ax.set_xticklabels([])
+        self.term_vm_ax._shared_x_axes.join(self.term_vm_ax, self.soma_vm_ax)
+
+    def build_soma_vm_ax(self):
+        self.soma_vm_lines, self.soma_vm_t_marker = self.build_rec_ax(
+            self.soma_vm_ax, "soma", "v", -70, -35, "Time (ms)", "Soma Voltage (mV)"
+        )
 
     def build_gaba_g_ax(self):
         self.gaba_g_lines, self.gaba_g_t_marker = self.build_rec_ax(
@@ -264,7 +273,7 @@ class SacSacAnimator:
             ylbl="GABA Conductance (μS)"
         )
         self.gaba_g_ax.set_xticklabels([])
-        self.gaba_g_ax._shared_x_axes.join(self.gaba_g_ax, self.term_vm_ax)
+        self.gaba_g_ax._shared_x_axes.join(self.gaba_g_ax, self.soma_vm_ax)
 
     def build_bp_g_ax(self):
         self.bp_g_lines, self.bp_g_t_marker = self.build_rec_ax(
@@ -276,7 +285,7 @@ class SacSacAnimator:
             ylbl="Total BPC Conductance (μS)"
         )
         self.bp_g_ax.set_xticklabels([])
-        self.bp_g_ax._shared_x_axes.join(self.bp_g_ax, self.term_vm_ax)
+        self.bp_g_ax._shared_x_axes.join(self.bp_g_ax, self.soma_vm_ax)
 
     def build_term_cai_ax(self):
         self.term_cai_lines, self.term_cai_t_marker = self.build_rec_ax(
@@ -288,7 +297,7 @@ class SacSacAnimator:
             ylbl="Terminal [Ca2+] (mM)"
         )
         self.term_cai_ax.set_xticklabels([])
-        self.term_cai_ax._shared_x_axes.join(self.term_cai_ax, self.term_vm_ax)
+        self.term_cai_ax._shared_x_axes.join(self.term_cai_ax, self.soma_vm_ax)
 
     def on_cond_slide(self, v):
         self.cond = self.conds[int(v)]
@@ -325,6 +334,7 @@ class SacSacAnimator:
 
     def update_rec_axes(self):
         self.update_rec(self.term_vm_lines, self.term_vm_t_marker, "term", "v")
+        self.update_rec(self.soma_vm_lines, self.soma_vm_t_marker, "soma", "v")
         self.update_rec(self.term_cai_lines, self.term_cai_t_marker, "term", "cai")
         self.update_rec(self.gaba_g_lines, self.gaba_g_t_marker, "gaba", "g")
         self.update_rec(self.bp_g_lines, self.bp_g_t_marker, "combined_bps", "g")
