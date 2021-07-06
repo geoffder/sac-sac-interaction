@@ -53,7 +53,7 @@ def get_quanta(recs, quantum, dt, bin_t=0.05, ceiling=0.9, max_q=5, scale_mode=F
     quanta_xaxis = np.arange(sz, inv_trans.shape[-1] + sz, sz) * dt
     binned = bin_mean(inv_trans, sz)
 
-    scaled_quantum = quantum / max_q if scale_mode else quantum
+    scaled_quantum = quantum / np.max(quantum) / max_q if scale_mode else quantum
 
     quanta = raster(
         binned,
