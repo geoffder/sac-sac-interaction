@@ -12,6 +12,42 @@ import matplotlib.pyplot as plt
 from utils import *
 
 
+class NetQuanta:
+    def __init__(self, syn, weight, delay=0.):
+        self.con = h.NetCon(None, syn, 0., 0., weight)
+        self.delay = delay  # NetCon does not impose delay on *scheduled* events
+        self._events = []
+
+    @property
+    def weight(self):
+        return self.con.weight[0]
+
+    @property
+    def events(self):
+        return self._events
+
+    @weight.setter
+    def weight(self, w):
+        self.con.weight[0] = w
+
+    @events.setter
+    def events(self, ts):
+        self._events = [t + self.delay for t in ts]
+
+    def clear_events(self):
+        self._events = []
+
+    def add_event(self, t):
+        self._events.append(t + self.delay)
+
+    def initialize(self):
+        """Schedule events in the NetCon object. This must be called within the
+        function given to h.FInitializeHandler in the model running class/functions.
+        """
+        for ev in self._events:
+            self.con.event(ev)
+
+
 class Sac:
     def __init__(self, name, forward=True, seed=0, params=None):
         self.set_default_params()
@@ -236,14 +272,15 @@ class Sac:
 
         # complete synapses are made up of a NetStim, Syn, and NetCon
         self.bps = {
-            "sust": {
-                "stim": [],
-                "syn": getattr(h, "sust_bps_%s" % self.name),
-                "con": []
-            },
+            "sust":
+                {
+                    # "stim": [],
+                    "syn": getattr(h, "sust_bps_%s" % self.name),
+                    "con": []
+                },
             "trans":
                 {
-                    "stim": [],
+                    # "stim": [],
                     "syn": getattr(h, "trans_bps_%s" % self.name),
                     "con": []
                 },
@@ -270,24 +307,18 @@ class Sac:
                 syns["syn"][i].tau2 = props["tau2"]
                 syns["syn"][i].e = props["rev"]
 
-                # Network Stimulus object (activates synaptic event)
-                syns["stim"].append(h.NetStim(pos))
-                syns["stim"][i].interval = 0
-                syns["stim"][i].number = 1
-                syns["stim"][i].noise = 0
-
-                # Network Connection object (connects stimulus to synapse)
+                # NetQuanta (wraps NetCon) for scheduling and applying conductance events
                 syns["con"].append(
-                    h.NetCon(
-                        syns["stim"][i],
-                        syns["syn"][i],
-                        0,  # threshold
-                        props["delay"],
-                        props["weight"],  # conductance strength
-                    )
+                    NetQuanta(syns["syn"][i], props["weight"], delay=props["delay"])
                 )
 
                 h.pop_section()  # remove section from access stack
+
+    def init_synapses(self):
+        """Initialize the events in each NetQuanta (NetCon wrapper)."""
+        for syns in self.bps.values():
+            for nq in syns["con"]:
+                nq.initialize()
 
     def calc_xy_locs(self):
         """Origin of the arena is (0, 0), so the dendrite is positioned with
@@ -349,9 +380,9 @@ class Sac:
     def bar_onsets(self, bar, rad_direction):
         # bare base onset with added jitter
         for k, ts in self.bar_sweep(bar, rad_direction).items():
-            for t, stim in zip(ts, self.bps[k]["stim"]):
+            for t, nq in zip(ts, self.bps[k]["con"]):
                 jit = self.rand.normal(0, 1)
-                stim.start = t + self.bp_jitter * jit
+                nq.events = [t + self.bp_jitter * jit]
 
     def update_noise(self):
         for s in [self.soma, self.dend, self.term]:
@@ -406,6 +437,10 @@ class SacPair:
         for sac in self.sacs.values():
             sac.update_noise()
 
+    def init_bipolars(self):
+        for sac in self.sacs.values():
+            sac.init_synapses()
+
 
 class Runner:
     def __init__(self, model, data_path=""):
@@ -428,6 +463,9 @@ class Runner:
         self.orig_gaba_weights = None
         self.orig_bp_props = None
         self.orig_bp_vel_scaling = None
+
+        # schedules the events for the NetCons during model initialization
+        self.initialize_handler = h.FInitializeHandler(self.model.init_bipolars)
 
     def set_hoc_params(self):
         """Set hoc NEURON environment model run parameters."""
@@ -472,6 +510,7 @@ class Runner:
             "orig_gaba_weights",
             "orig_bp_props",
             "orig_bp_vel_scaling",
+            "initialize_handler",
         ]:
             params.pop(key)
         return params
@@ -540,7 +579,8 @@ class Runner:
                         w = vel_scale["weight"](vel, w)
                         t1 = vel_scale["tau1"](vel, t1)
                         t2 = vel_scale["tau2"](vel, t2)
-                    bps["con"][i].weight[0] = w
+                    # bps["con"][i].weight[0] = w
+                    bps["con"][i].weight = w
                     bps["syn"][i].tau1 = t1
                     bps["syn"][i].tau2 = t2
 
@@ -548,7 +588,8 @@ class Runner:
         for n, sac in self.model.sacs.items():
             for props, bps in zip(sac.bp_props.values(), sac.bps.values()):
                 for i in range(len(bps["syn"])):
-                    bps["con"][i].weight[0] = props["weight"]
+                    # bps["con"][i].weight[0] = props["weight"]
+                    bps["con"][i].weight = props["weight"]
                     bps["syn"][i].tau1 = props["tau1"]
                     bps["syn"][i].tau2 = props["tau2"]
 
