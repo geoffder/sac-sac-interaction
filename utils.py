@@ -234,6 +234,8 @@ def find_rise_start(arr, step=10):
     return rec(arr[peak_idx], peak_idx)
 
 
+# TODO: should re-implement as imperative like fall, possibly a "generic" function
+# that can go in either direction depending on the step sign.
 def find_rise_bsln(arr, bsln_start=0, bsln_end=None, step=10):
     peak_idx = np.argmax(arr)
     bsln = np.mean(arr[bsln_start:bsln_end])
@@ -243,6 +245,23 @@ def find_rise_bsln(arr, bsln_start=0, bsln_end=None, step=10):
         return rec(min_idx) if arr[min_idx] > bsln else idx
 
     return rec(peak_idx)
+
+
+def find_fall_bsln(arr, bsln_start=0, bsln_end=None, offset=0., step=10):
+    idx = np.argmax(arr)
+    last_min = idx
+    bsln = np.mean(arr[bsln_start:bsln_end]) + offset
+    n_pts = len(arr)
+
+    while idx + step < n_pts:
+        min_idx = np.argmin(arr[idx:idx + step]) + idx
+        if arr[min_idx] < bsln:
+            return last_min
+        else:
+            last_min = min_idx
+            idx += step
+
+    return n_pts - 1
 
 
 class BiexpFitter:
