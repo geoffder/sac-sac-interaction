@@ -234,34 +234,31 @@ def find_rise_start(arr, step=10):
     return rec(arr[peak_idx], peak_idx)
 
 
-# TODO: should re-implement as imperative like fall, possibly a "generic" function
-# that can go in either direction depending on the step sign.
-def find_rise_bsln(arr, bsln_start=0, bsln_end=None, step=10):
-    peak_idx = np.argmax(arr)
-    bsln = np.mean(arr[bsln_start:bsln_end])
-
-    def rec(idx):
-        min_idx = np.argmin(arr[idx - step:idx]) + idx - step
-        return rec(min_idx) if arr[min_idx] > bsln else idx
-
-    return rec(peak_idx)
-
-
-def find_fall_bsln(arr, bsln_start=0, bsln_end=None, offset=0., step=10):
+def find_bsln_return(arr, bsln_start=0, bsln_end=None, offset=0., step=10):
     idx = np.argmax(arr)
     last_min = idx
     bsln = np.mean(arr[bsln_start:bsln_end]) + offset
-    n_pts = len(arr)
+    if step > 0:
+        last = len(arr) - 1
+        stop = lambda next: next <= last
+        get_min = lambda i: np.argmin(arr[i:i + step]) + i
+    else:
+        stop = lambda next: next >= 0
+        get_min = lambda i: np.argmin(arr[i + step:i]) + i + step
 
-    while idx + step < n_pts:
-        min_idx = np.argmin(arr[idx:idx + step]) + idx
+    while stop(idx + step):
+        min_idx = get_min(idx)
         if arr[min_idx] < bsln:
             return last_min
         else:
             last_min = min_idx
             idx += step
 
-    return n_pts - 1
+    return min_idx
+
+
+def find_rise_bsln(arr, bsln_start=0, bsln_end=None, offset=0., step=10):
+    return find_bsln_return(arr, bsln_start, bsln_end, offset, -step)
 
 
 class BiexpFitter:
