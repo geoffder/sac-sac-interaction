@@ -234,8 +234,10 @@ def find_rise_start(arr, step=10):
     return rec(arr[peak_idx], peak_idx)
 
 
-def find_bsln_return(arr, bsln_start=0, bsln_end=None, offset=0., step=10):
-    idx = np.argmax(arr)
+def find_bsln_return(
+    arr, bsln_start=0, bsln_end=None, offset=0., step=10, pre_step=False
+):
+    idx = np.argmax(arr[bsln_end:]) + (0 if bsln_end is None else bsln_end)
     last_min = idx
     bsln = np.mean(arr[bsln_start:bsln_end]) + offset
     if step > 0:
@@ -249,7 +251,7 @@ def find_bsln_return(arr, bsln_start=0, bsln_end=None, offset=0., step=10):
     while stop(idx + step):
         min_idx = get_min(idx)
         if arr[min_idx] < bsln:
-            return last_min
+            return last_min if pre_step else min_idx
         else:
             last_min = min_idx
             idx += step
@@ -257,8 +259,8 @@ def find_bsln_return(arr, bsln_start=0, bsln_end=None, offset=0., step=10):
     return min_idx
 
 
-def find_rise_bsln(arr, bsln_start=0, bsln_end=None, offset=0., step=10):
-    return find_bsln_return(arr, bsln_start, bsln_end, offset, -step)
+def find_rise_bsln(arr, bsln_start=0, bsln_end=None, offset=0., step=10, pre_step=False):
+    return find_bsln_return(arr, bsln_start, bsln_end, offset, -step, pre_step)
 
 
 class BiexpFitter:
