@@ -13,8 +13,8 @@ from utils import *
 
 
 class NetQuanta:
-    def __init__(self, syn, weight, delay=0.):
-        self.con = h.NetCon(None, syn, 0., 0., weight)
+    def __init__(self, syn, weight, delay=0.0):
+        self.con = h.NetCon(None, syn, 0.0, 0.0, weight)
         self.delay = delay  # NetCon does not impose delay on *scheduled* events
         self._events = []
 
@@ -74,107 +74,106 @@ class Sac:
         # dendrite physical properties
         self.dend_nseg = 25
         self.seg_step = 1 / self.dend_nseg
-        self.dend_diam = .2
+        self.dend_diam = 0.2
         self.initial_dend_diam = 0.4
         self.initial_dend_l = 10
         self.dend_l = 130
         self.term_l = 10
-        self.term_diam = .2
+        self.term_diam = 0.2
         self.dend_ra = 100
 
         # soma active properties
-        self.soma_na = .0  # [S/cm2]
-        self.soma_k = .005  # [S/cm2]
-        self.soma_km = 0.  # [S/cm2]
+        self.soma_na = 0.0  # [S/cm2]
+        self.soma_k = 0.005  # [S/cm2]
+        self.soma_km = 0.0  # [S/cm2]
 
-        self.soma_gleak_hh = .0001667  # [S/cm2]
+        self.soma_gleak_hh = 0.0001667  # [S/cm2]
         # self.soma_eleak_hh = -70.0  # [mV]
         self.soma_eleak_hh = -54.4  # [mV]
 
         # dend compartment active properties
-        self.initial_k = .001  # [S/cm2]
-        self.initial_km = 0.  # [S/cm2]
+        self.initial_k = 0.001  # [S/cm2]
+        self.initial_km = 0.0  # [S/cm2]
 
-        self.dend_k = 0.
-        self.dend_km = 0.
-        self.dend_na = .00  # [S/cm2] .03
+        self.dend_k = 0.0
+        self.dend_km = 0.0
+        self.dend_na = 0.00  # [S/cm2] .03
         self.dend_gleak_hh = 0.0001667  # [S/cm2]
         # self.dend_eleak_hh = -70.0  # [mV]
         self.dend_eleak_hh = -54.4  # [mV]
 
-        self.term_na = 0.
-        self.term_k = 0.  # [S/cm2]
-        self.term_km = 0.  # [S/cm2]
-        self.term_cat = .0003
-        self.term_cal = 0.
+        self.term_na = 0.0
+        self.term_k = 0.0  # [S/cm2]
+        self.term_km = 0.0  # [S/cm2]
+        self.term_cat = 0.0003
+        self.term_cal = 0.0
         self.term_can = 0.0003
         self.term_cap = 0.0003
 
         # membrane noise
-        self.dend_nz_factor = 0  #.1  # default NF_HHst = 1
-        self.soma_nz_factor = 0  #.1
+        self.dend_nz_factor = 0  # .1  # default NF_HHst = 1
+        self.soma_nz_factor = 0  # .1
 
         self.bp_jitter = 0
         self.bp_locs = {"sust": [5], "trans": [25, 45, 65]}
+        # TODO: add bp_releasers (name?) which takes an onset time, then returns a
+        # list of event times (to be loaded into an NetQuanta). For the old way, this
+        # will just wrap the value as a singleton list, but for the new release-rate
+        # scheme, this will be a poisson generator using the release rate waveform
+        # for the particular bipolar type
         self.bp_props = {
-            "sust":
-                {
-                    "tau1": 10,  # excitatory conductance rise tau [ms]
-                    "tau2": 60,  # excitatory conductance decay tau [ms]
-                    "rev": 0,  # excitatory reversal potential [mV]
-                    "weight": .000275,  # weight of excitatory NetCons [uS] .00023
-                    "delay": 0,
-                },
-            "trans":
-                {
-                    "tau1": .1,  # inhibitory conductance rise tau [ms]
-                    "tau2": 12,  # inhibitory conductance decay tau [ms]
-                    "rev": 0,  # inhibitory reversal potential [mV]
-                    "weight": .000495,  # weight of inhibitory NetCons [uS]
-                    "delay": 0,
-                }
+            "sust": {
+                "tau1": 10,  # excitatory conductance rise tau [ms]
+                "tau2": 60,  # excitatory conductance decay tau [ms]
+                "rev": 0,  # excitatory reversal potential [mV]
+                "weight": 0.000275,  # weight of excitatory NetCons [uS] .00023
+                "delay": 0,
+            },
+            "trans": {
+                "tau1": 0.1,  # inhibitory conductance rise tau [ms]
+                "tau2": 12,  # inhibitory conductance decay tau [ms]
+                "rev": 0,  # inhibitory reversal potential [mV]
+                "weight": 0.000495,  # weight of inhibitory NetCons [uS]
+                "delay": 0,
+            },
         }
-
+        self.bp_releasers = {"sust": lambda t: [t], "trans": lambda t: [t]}
         self.loc_scaling = False
         self.bp_loc_scaling = {
-            "sust":
-                {
-                    "weight": (lambda loc, w: w),
-                    "tau1": (lambda loc, t1: t1),
-                    "tau2": (lambda loc, t2: t2),
-                },
-            "trans":
-                {
-                    "weight": (lambda loc, w: w),
-                    "tau1": (lambda loc, t1: t1),
-                    "tau2": (lambda loc, t2: t2),
-                },
+            "sust": {
+                "weight": (lambda loc, w: w),
+                "tau1": (lambda loc, t1: t1),
+                "tau2": (lambda loc, t2: t2),
+            },
+            "trans": {
+                "weight": (lambda loc, w: w),
+                "tau1": (lambda loc, t1: t1),
+                "tau2": (lambda loc, t2: t2),
+            },
         }
 
         self.vel_scaling = False
         self.bp_vel_scaling = {
-            "sust":
-                {
-                    "weight": (lambda v, w: w - (np.clip(v / 4, 0, 1) * w * .5)),
-                    "tau1": (lambda v, t1: t1),
-                    "tau2": (lambda v, t2: t2),
-                },
-            "trans":
-                {
-                    "weight": (lambda v, w: w - (np.clip(v / 4, 0, 1) * w * .5)),
-                    "tau1": (lambda v, t1: t1),
-                    "tau2": (lambda v, t2: t2),
-                },
+            "sust": {
+                "weight": (lambda v, w: w - (np.clip(v / 4, 0, 1) * w * 0.5)),
+                "tau1": (lambda v, t1: t1),
+                "tau2": (lambda v, t2: t2),
+            },
+            "trans": {
+                "weight": (lambda v, w: w - (np.clip(v / 4, 0, 1) * w * 0.5)),
+                "tau1": (lambda v, t1: t1),
+                "tau2": (lambda v, t2: t2),
+            },
         }
 
         self.gaba_props = {
             "loc": 15,  # distance from soma [um]
             "thresh": -50,  # pre-synaptic release threshold
-            "tau1": .5,  # inhibitory conductance rise tau [ms]
+            "tau1": 0.5,  # inhibitory conductance rise tau [ms]
             "tau2": 60,  # inhibitory conductance decay tau [ms]
             "rev": -60,  # inhibitory reversal potential [mV]
-            "weight": .001,  # weight of inhibitory NetCons [uS]
-            "delay": .5,
+            "weight": 0.001,  # weight of inhibitory NetCons [uS]
+            "delay": 0.5,
         }
 
     def update_params(self, params):
@@ -186,8 +185,14 @@ class Sac:
         params = self.__dict__.copy()
         # remove the non-param entries (model objects)
         for key in [
-            "soma", "initial", "dend", "term", "bps", "rand", "bp_loc_scaling",
-            "bp_vel_scaling"
+            "soma",
+            "initial",
+            "dend",
+            "term",
+            "bps",
+            "rand",
+            "bp_loc_scaling",
+            "bp_vel_scaling",
         ]:
             params.pop(key)
         return params
@@ -266,24 +271,27 @@ class Sac:
     def create_synapses(self):
         # create *named* hoc objects for each synapse (for gui compatibility)
         h(
-            "objref sust_bps_%s[%i], trans_bps_%s[%i]" %
-            (self.name, len(self.bp_locs["sust"]), self.name, len(self.bp_locs["trans"]))
+            "objref sust_bps_%s[%i], trans_bps_%s[%i]"
+            % (
+                self.name,
+                len(self.bp_locs["sust"]),
+                self.name,
+                len(self.bp_locs["trans"]),
+            )
         )
 
         # complete synapses are made up of a NetStim, Syn, and NetCon
         self.bps = {
-            "sust":
-                {
-                    # "stim": [],
-                    "syn": getattr(h, "sust_bps_%s" % self.name),
-                    "con": []
-                },
-            "trans":
-                {
-                    # "stim": [],
-                    "syn": getattr(h, "trans_bps_%s" % self.name),
-                    "con": []
-                },
+            "sust": {
+                # "stim": [],
+                "syn": getattr(h, "sust_bps_%s" % self.name),
+                "con": [],
+            },
+            "trans": {
+                # "stim": [],
+                "syn": getattr(h, "trans_bps_%s" % self.name),
+                "con": [],
+            },
         }
 
         for (k, syns), locs, props in zip(
@@ -333,7 +341,9 @@ class Sac:
         self.initial_dend_x_origin = o_x + (
             (total_l + self.gaba_props["loc"]) / -2 * dir_sign
         )
-        self.dend_x_origin = self.initial_dend_x_origin + (self.initial_dend_l * dir_sign)
+        self.dend_x_origin = self.initial_dend_x_origin + (
+            self.initial_dend_l * dir_sign
+        )
         self.term_x_origin = self.initial_dend_x_origin + (pre_term_l * dir_sign)
         self.soma_x_origin = self.initial_dend_x_origin + (
             self.soma_l / 2 * dir_sign * -1
@@ -342,7 +352,7 @@ class Sac:
         self.bp_xy_locs = {
             k: {
                 "x": [dir_sign * l + self.initial_dend_x_origin for l in locs],
-                "y": [o_y for _ in locs]
+                "y": [o_y for _ in locs],
             }
             for k, locs in self.bp_locs.items()
         }
@@ -382,7 +392,7 @@ class Sac:
         for k, ts in self.bar_sweep(bar, rad_direction).items():
             for t, nq in zip(ts, self.bps[k]["con"]):
                 jit = self.rand.normal(0, 1)
-                nq.events = [t + self.bp_jitter * jit]
+                nq.events = self.bp_releasers[k](t + self.bp_jitter * jit)
 
     def update_noise(self):
         for s in [self.soma, self.dend, self.term]:
@@ -394,7 +404,7 @@ class SacPair:
     def __init__(self, sac_params=None):
         self.sacs = {
             "a": Sac("a", params=sac_params),
-            "b": Sac("b", forward=False, params=sac_params)
+            "b": Sac("b", forward=False, params=sac_params),
         }
         self.wire_gaba()
 
@@ -407,7 +417,8 @@ class SacPair:
             else:
                 sac.dend.push()
                 pos = np.round(
-                    (sac.gaba_props["loc"] - sac.initial_dend_l) / sac.dend_l, decimals=5
+                    (sac.gaba_props["loc"] - sac.initial_dend_l) / sac.dend_l,
+                    decimals=5,
                 )
             self.gaba_syns[n] = {"syn": h.Exp2Syn(pos)}
             self.gaba_syns[n]["syn"].tau1 = sac.gaba_props["tau1"]
@@ -478,7 +489,7 @@ class Runner:
     def config_stimulus(self):
         # light stimulus
         self.light_bar = {
-            "start_time": 0.,  # vel -> start: .25 -> -900; .5 -> -400
+            "start_time": 0.0,  # vel -> start: .25 -> -900; .5 -> -400
             "speed": 1.0,  # speed of the stimulus bar (um/ms)
             "width": 500,  # width of the stimulus bar(um)
             "x_motion": True,  # move bar in x, if not, move bar in y
@@ -529,7 +540,7 @@ class Runner:
 
     def velocity_run(
         self,
-        velocities=[.1, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2],
+        velocities=[0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
         n_trials=1,
         prefix="",
     ):
@@ -555,7 +566,7 @@ class Runner:
         data = {
             "model_params": json.dumps(model_params),
             "exp_params": json.dumps(exp_params),
-            "data": self.stack_data(n_trials, n_vels)
+            "data": self.stack_data(n_trials, n_vels),
         }
         self.data = deepcopy(self.empty_data)  # clear out stored data
 
@@ -564,8 +575,11 @@ class Runner:
     def scale_bps(self, vel):
         for n, sac in self.model.sacs.items():
             for props, locs, loc_scale, vel_scale, bps in zip(
-                sac.bp_props.values(), sac.bp_locs.values(), sac.bp_loc_scaling.values(),
-                sac.bp_vel_scaling.values(), sac.bps.values()
+                sac.bp_props.values(),
+                sac.bp_locs.values(),
+                sac.bp_loc_scaling.values(),
+                sac.bp_vel_scaling.values(),
+                sac.bps.values(),
             ):
                 for i, loc in enumerate(locs):
                     w = props["weight"]
@@ -596,16 +610,18 @@ class Runner:
     def remove_gaba(self):
         if self.orig_gaba_weights is None:
             self.orig_gaba_weights = {}
-            for (n, sac
-                ), syn in zip(self.model.sacs.items(), self.model.gaba_syns.values()):
+            for (n, sac), syn in zip(
+                self.model.sacs.items(), self.model.gaba_syns.values()
+            ):
                 self.orig_gaba_weights[n] = sac.gaba_props["weight"]
                 sac.gaba_props["weight"] = 0
                 syn["con"].weight[0] = 0
 
     def restore_gaba(self):
         if self.orig_gaba_weights is not None:
-            for (n, sac
-                ), syn in zip(self.model.sacs.items(), self.model.gaba_syns.values()):
+            for (n, sac), syn in zip(
+                self.model.sacs.items(), self.model.gaba_syns.values()
+            ):
                 sac.gaba_props["weight"] = self.orig_gaba_weights[n]
                 syn["con"].weight[0] = self.orig_gaba_weights[n]
             self.orig_gaba_weights = None
@@ -637,13 +653,10 @@ class Runner:
 
     def velocity_mechanism_run(
         self,
-        velocities=[.1, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2],
+        velocities=[0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
         mech_trials=1,
-        uniform_props={
-            "tau1": 1,
-            "tau2": 12,
-        },
-        conds={"control", "no_gaba", "uniform", "no_mech"}
+        uniform_props={"tau1": 1, "tau2": 12,},
+        conds={"control", "no_gaba", "uniform", "no_mech"},
     ):
         data = {}
         if "control" in conds:
@@ -750,6 +763,7 @@ class Runner:
     def clear_recordings(self):
         """Clear out all of the recording vectors in the recs dict, accounting for
         arbitrary levels of nesting, as long as all of the leaves are hoc vectors."""
+
         def loop(rs):
             for r in rs:
                 if type(r) == dict:
