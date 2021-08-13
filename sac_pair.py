@@ -193,6 +193,7 @@ class Sac:
             "rand",
             "bp_loc_scaling",
             "bp_vel_scaling",
+            "bp_releasers",
         ]:
             params.pop(key)
         return params
