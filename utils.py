@@ -342,3 +342,21 @@ class BiexpFitter:
 
 def biexp(x, m, t1, t2, b):
     return m * (np.exp(-t2 * x) - np.exp(-t1 * x)) + b
+
+
+def aligned_avg(recs, bsln_start=50, bsln_end=150, step=1):
+    """Aligns provided (positive going) recordings (2d ndarray, shape: (N, T))
+    by their rises."""
+    rise_idxs = np.array(
+        [
+            find_rise_bsln(r, bsln_start=bsln_start, bsln_end=bsln_end, step=step)
+            for r in recs
+        ]
+    )
+    shifts = rise_idxs - np.min(rise_idxs)
+    trim = np.max(shifts)
+    aligned = np.mean(
+        [r[s : (-trim + s) if s != trim else None] for r, s in zip(recs, shifts)],
+        axis=0,
+    )
+    return aligned
