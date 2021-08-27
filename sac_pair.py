@@ -329,6 +329,11 @@ class Sac:
             for nq in syns["con"]:
                 nq.initialize()
 
+    def clear_synapses(self):
+        for syns in self.bps.values():
+            for nq in syns["con"]:
+                nq.clear_events()
+
     def calc_xy_locs(self):
         """Origin of the arena is (0, 0), so the dendrite is positioned with
         that as the centre. X locations are calculated based on the distances of
@@ -453,6 +458,10 @@ class SacPair:
         for sac in self.sacs.values():
             sac.init_synapses()
 
+    def clear_bipolar_events(self):
+        for sac in self.sacs.values():
+            sac.clear_synapses()
+
 
 class Runner:
     def __init__(self, model, data_path=""):
@@ -538,6 +547,7 @@ class Runner:
         self.clear_recordings()
         h.run()
         self.dump_recordings()
+        self.model.clear_bipolar_events()
 
     def velocity_run(
         self,
@@ -782,6 +792,37 @@ class Runner:
                 return stack_trials(n_trials, n_vels, val)
 
         return {k: stacker(v) for k, v in self.data.items()}
+
+    def isolated_input_battery(self, times, n_trials=5):
+        """TODO:
+          - this will march through each of the transient bipolar inputs (ideally regularly
+            spaced along the dendrite) and play the given train of event timings
+          - can be used to observe the size of individual quanta as well as what
+            quantal trains look like at the soma / dendrite tip
+          - need to be able to do this in voltage clamp as well
+        """
+        inputs = self.model.sacs["a"].bps["trans"]["con"]
+        for i, nq in enumerate(inputs):
+            print("synapse %i..." % i, end=" ", flush=True)
+            h.init()
+            nq.events = times
+
+            for j in range(n_trials):
+                print("%i" % j, end=" ", flush=True)
+                self.model.update_noise()
+                self.clear_recordings()
+                h.run()
+                self.dump_recordings()
+
+            self.model.clear_bipolar_events()
+            print("")
+
+        data = {
+            "model_params": json.dumps(self.model.get_params_dict()),
+            "exp_params": json.dumps(self.get_params_dict()),
+            "data": self.stack_data(len(inputs), n_trials),
+        }
+        return data
 
 
 if __name__ == "__main__":
