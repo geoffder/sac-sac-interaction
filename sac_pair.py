@@ -485,6 +485,10 @@ class Runner:
         self.orig_bp_props = None
         self.orig_bp_vel_scaling = None
 
+        self.vc = None
+        self.vc_rec = None
+        self.vc_data = None
+
         # schedules the events for the NetCons during model initialization
         self.initialize_handler = h.FInitializeHandler(self.model.init_bipolars)
 
@@ -532,6 +536,9 @@ class Runner:
             "orig_bp_props",
             "orig_bp_vel_scaling",
             "initialize_handler",
+            "vc",
+            "vc_rec",
+            "vc_data",
         ]:
             params.pop(key)
         return params
@@ -756,6 +763,28 @@ class Runner:
             self.recs["gaba"][n]["g"].record(self.model.gaba_syns[n]["syn"]._ref_g)
         self.empty_data = deepcopy(self.data)  # for resetting
 
+    def place_vc(self):
+        self.soma.push()
+        self.vc = nrn_objref("vc")
+        self.vc = h.SEClamp(0.5)
+        h.pop_section()
+
+        # hold target voltage for entire duration
+        self.vc.dur1 = h.tstop
+        self.vc.dur2 = 0.0
+        self.vc.dur3 = 0.0
+        self.vc.amp1 = 0.0
+
+        # block voltage-gated conductances
+        for sec in [self.soma, self.initial, self.dend, self.term]:
+            sec.gnabar_HHst = 0.0
+            sec.gkbar_HHst = 0.0
+            sec.gkmbar_HHst = 0.0
+
+        self.vc_rec = h.Vector()
+        self.vc_rec.record(self.vc._ref_i)
+        self.vc_data = []
+
     def dump_recordings(self):
         for (p, rs), ds in zip(self.recs.items(), self.data.values()):
             for n in self.model.sacs.keys():
@@ -771,6 +800,9 @@ class Runner:
                     for k in ["i", "g"]:
                         ds[n][k].append(np.array(rs[n][k]))
 
+        if self.vc_rec is not None:
+            self.vc_data.append(np.array(self.vc_rec))
+
     def clear_recordings(self):
         """Clear out all of the recording vectors in the recs dict, accounting for
         arbitrary levels of nesting, as long as all of the leaves are hoc vectors."""
@@ -781,6 +813,9 @@ class Runner:
                     loop(r.values())
                 else:
                     r.resize(0)
+
+        if self.vc_rec is not None:
+            self.vc_rec.resize(0)
 
         loop(self.recs.values())
 
@@ -794,19 +829,14 @@ class Runner:
         return {k: stacker(v) for k, v in self.data.items()}
 
     def isolated_input_battery(self, times, n_trials=5):
-        """TODO:
-          - this will march through each of the transient bipolar inputs (ideally regularly
-            spaced along the dendrite) and play the given train of event timings
-          - can be used to observe the size of individual quanta as well as what
-            quantal trains look like at the soma / dendrite tip
-          - need to be able to do this in voltage clamp as well
-        """
+        """March through each of the transient bipolar inputs (ideally regularly
+        spaced along the dendrite) and play the given train of event timings for
+        `n_trials` repetitions."""
         inputs = self.model.sacs["a"].bps["trans"]["con"]
         for i, nq in enumerate(inputs):
             print("synapse %i..." % i, end=" ", flush=True)
             h.init()
             nq.events = times
-
             for j in range(n_trials):
                 print("%i" % j, end=" ", flush=True)
                 self.model.update_noise()

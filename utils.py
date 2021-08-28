@@ -1,5 +1,6 @@
 from neuron import h
 import h5py as h5
+import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,6 +12,12 @@ import symfit as sf
 def nrn_section(name):
     """Create NEURON hoc section, and return a corresponding python object."""
     h("create " + name)
+    return h.__getattribute__(name)
+
+
+def nrn_objref(name):
+    """Create NEURON hoc objref, and return a corresponding python object."""
+    h("objref " + name)
     return h.__getattribute__(name)
 
 
