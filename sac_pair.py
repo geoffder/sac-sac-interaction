@@ -584,7 +584,7 @@ class Runner:
         data = {
             "model_params": json.dumps(model_params),
             "exp_params": json.dumps(exp_params),
-            "data": self.stack_data(n_trials, n_vels),
+            "data": self.stack_data(self.data, n_trials, n_vels),
         }
         self.data = deepcopy(self.empty_data)  # clear out stored data
 
@@ -764,7 +764,8 @@ class Runner:
         self.empty_data = deepcopy(self.data)  # for resetting
 
     def place_vc(self):
-        self.soma.push()
+        sac = self.model.sacs["a"]
+        sac.soma.push()
         self.vc = nrn_objref("vc")
         self.vc = h.SEClamp(0.5)
         h.pop_section()
@@ -773,10 +774,10 @@ class Runner:
         self.vc.dur1 = h.tstop
         self.vc.dur2 = 0.0
         self.vc.dur3 = 0.0
-        self.vc.amp1 = 0.0
+        self.vc.amp1 = -60.0
 
         # block voltage-gated conductances
-        for sec in [self.soma, self.initial, self.dend, self.term]:
+        for sec in [sac.soma, sac.initial, sac.dend, sac.term]:
             sec.gnabar_HHst = 0.0
             sec.gkbar_HHst = 0.0
             sec.gkmbar_HHst = 0.0
@@ -819,14 +820,15 @@ class Runner:
 
         loop(self.recs.values())
 
-    def stack_data(self, n_trials, n_vels):
+    @staticmethod
+    def stack_data(data, n_trials, n_vels):
         def stacker(val):
             if type(val) == dict:
                 return {k: stacker(v) for k, v in val.items()}
             else:
                 return stack_trials(n_trials, n_vels, val)
 
-        return {k: stacker(v) for k, v in self.data.items()}
+        return {k: stacker(v) for k, v in data.items()}
 
     def isolated_input_battery(self, times, n_trials=5):
         """March through each of the transient bipolar inputs (ideally regularly
@@ -847,10 +849,15 @@ class Runner:
             self.model.clear_bipolar_events()
             print("")
 
+        if self.vc_data is None:
+            all_recs = self.data
+        else:
+            all_recs = {**self.data, "vc": self.vc_data}
+
         data = {
             "model_params": json.dumps(self.model.get_params_dict()),
             "exp_params": json.dumps(self.get_params_dict()),
-            "data": self.stack_data(len(inputs), n_trials),
+            "data": self.stack_data(all_recs, len(inputs), n_trials),
         }
         return data
 
