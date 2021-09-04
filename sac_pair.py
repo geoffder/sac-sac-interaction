@@ -110,6 +110,11 @@ class Sac:
         self.term_can = 0.0003
         self.term_cap = 0.0003
 
+        # sink dendrite parameters
+        self.sink_dend_locs = [35, 65, 95, 125]
+        self.sink_orders = [4, 3, 2, 1]
+        self.sink_branch_len = 20
+
         # membrane noise
         self.dend_nz_factor = 0  # .1  # default NF_HHst = 1
         self.soma_nz_factor = 0  # .1
@@ -217,6 +222,50 @@ class Sac:
 
         return soma
 
+    def sink_branch(self, name, n_orders):
+
+        # def loop (all_secs, lbl, order,parent):
+        #    if order < n_orders:
+        #         left = nrn_section("branch_%s_%i_l_%s" % (lbl + "_", self.name))
+        #         right = nrn_section("branch_%i_r_%s" % (n, self.name))
+        #         all_secs = all_secs + [left, right]
+        #    else:
+
+        head = nrn_section("branch_%s_head_%s" % (name, self.name))
+        last = [[(head, "")]]
+        all_secs = [head]
+        n = 1
+        while n < n_orders:
+            next = []
+            for branch in last:
+                for (sec, lbl) in branch:
+                    left = nrn_section("branch_%s%s_l_%s" % (name, lbl, self.name))
+                    right = nrn_section("branch%s%s_r_%s" % (name, lbl, self.name))
+                    left.connect(sec)
+                    right.connect(sec)
+                    next.append([(left, lbl + "_l"), (right, lbl + "_r")])
+                    all_secs.append(left)
+                    all_secs.append(right)
+            last = next
+            n += 1
+
+        for sec in all_secs:
+            sec.nseg = self.dend_nseg
+            sec.Ra = self.dend_ra
+            sec.insert("HHst")
+            sec.insert("cad")
+            sec.gleak_HHst = self.dend_gleak_hh  # (S/cm2)
+            sec.eleak_HHst = self.dend_eleak_hh
+            sec.NF_HHst = self.dend_nz_factor
+            sec.seed_HHst = self.nz_seed
+            sec.diam = self.dend_diam
+            sec.L = self.sink_branch_len
+            sec.gtbar_HHst = 0
+            sec.glbar_HHst = 0
+            sec.gnabar_HHst = 0
+
+        return head, all_secs
+
     def create_dend(self):
         initial = nrn_section("initial_%s" % (self.name))
         dend = nrn_section("dend_%s" % (self.name))
@@ -267,6 +316,13 @@ class Sac:
 
         dend.connect(initial)
         term.connect(dend)
+
+        for (loc, n_orders) in zip(self.sink_dend_locs, self.sink_orders):
+            pos = np.round(max(0, loc - self.initial_dend_l) / self.dend_l, decimals=5)
+            print(pos)
+            sink, _ = self.sink_branch(str(loc), n_orders)
+            sink.connect(dend(pos))
+
         return initial, dend, term
 
     def create_synapses(self):
@@ -307,7 +363,7 @@ class Sac:
                 else:
                     self.dend.push()
                     pos = np.round(
-                        min(0, locs[i] - self.initial_dend_l) / self.dend_l, decimals=5
+                        max(0, locs[i] - self.initial_dend_l) / self.dend_l, decimals=5
                     )
 
                 # Synapse object (source of conductance)
@@ -871,5 +927,5 @@ if __name__ == "__main__":
 
     model = SacPair()
     runner = Runner(model, data_path=data_path)
-    data = runner.velocity_run()
-    pack_hdf(data_path + "test", data)
+    # data = runner.velocity_run()
+    # pack_hdf(data_path + "test", data)
