@@ -58,6 +58,7 @@ class Sac:
         self.seed = seed  # NOTE: if separate rands like this, must use far apart seeds
         self.rand = h.Random(seed)
         self.nz_seed = 1  # noise seed for HHst
+        self.np_rng = np.random.default_rng(seed)
 
         self.calc_xy_locs()
         self.create_neuron()  # builds and connects soma and dendrite
@@ -114,6 +115,7 @@ class Sac:
         self.sink_dend_locs = [35, 65, 95, 125]
         self.sink_orders = [4, 3, 2, 1]
         self.sink_branch_len = 20
+        self.sink_nseg = 1
 
         # membrane noise
         self.dend_nz_factor = 0  # .1  # default NF_HHst = 1
@@ -121,11 +123,6 @@ class Sac:
 
         self.bp_jitter = 0
         self.bp_locs = {"sust": [5], "trans": [25, 45, 65]}
-        # TODO: add bp_releasers (name?) which takes an onset time, then returns a
-        # list of event times (to be loaded into an NetQuanta). For the old way, this
-        # will just wrap the value as a singleton list, but for the new release-rate
-        # scheme, this will be a poisson generator using the release rate waveform
-        # for the particular bipolar type
         self.bp_props = {
             "sust": {
                 "tau1": 10,  # excitatory conductance rise tau [ms]
@@ -142,7 +139,8 @@ class Sac:
                 "delay": 0,
             },
         }
-        self.bp_releasers = {"sust": lambda t: [t], "trans": lambda t: [t]}
+        # first argument is for providing an rng instance
+        self.bp_releasers = {"sust": lambda _rng, t: [t], "trans": lambda _rng, t: [t]}
         self.loc_scaling = False
         self.bp_loc_scaling = {
             "sust": {
@@ -194,8 +192,11 @@ class Sac:
             "initial",
             "dend",
             "term",
+            "sinks",
+            "all_dends",
             "bps",
             "rand",
+            "np_rng",
             "bp_loc_scaling",
             "bp_vel_scaling",
             "bp_releasers",
@@ -224,13 +225,6 @@ class Sac:
 
     def sink_branch(self, name, n_orders):
 
-        # def loop (all_secs, lbl, order,parent):
-        #    if order < n_orders:
-        #         left = nrn_section("branch_%s_%i_l_%s" % (lbl + "_", self.name))
-        #         right = nrn_section("branch_%i_r_%s" % (n, self.name))
-        #         all_secs = all_secs + [left, right]
-        #    else:
-
         head = nrn_section("branch_%s_head_%s" % (name, self.name))
         last = [[(head, "")]]
         all_secs = [head]
@@ -250,7 +244,7 @@ class Sac:
             n += 1
 
         for sec in all_secs:
-            sec.nseg = self.dend_nseg
+            sec.nseg = self.sink_nseg
             sec.Ra = self.dend_ra
             sec.insert("HHst")
             sec.insert("cad")
@@ -317,13 +311,14 @@ class Sac:
         dend.connect(initial)
         term.connect(dend)
 
+        all_sinks = []
         for (loc, n_orders) in zip(self.sink_dend_locs, self.sink_orders):
             pos = np.round(max(0, loc - self.initial_dend_l) / self.dend_l, decimals=5)
-            print(pos)
             sink, _ = self.sink_branch(str(loc), n_orders)
             sink.connect(dend(pos))
+            all_sinks.append(sink)
 
-        return initial, dend, term
+        return initial, dend, term, all_sinks
 
     def create_synapses(self):
         # create *named* hoc objects for each synapse (for gui compatibility)
@@ -423,7 +418,8 @@ class Sac:
     def create_neuron(self):
         # create compartments (using parameters in self.__dict__)
         self.soma = self.create_soma()
-        self.initial, self.dend, self.term = self.create_dend()
+        self.initial, self.dend, self.term, self.sinks = self.create_dend()
+        self.all_dends = [self.initial, self.dend, self.term] + self.sinks
         self.initial.connect(self.soma)
         self.create_synapses()  # generate synapses on dendrite
 
@@ -454,10 +450,10 @@ class Sac:
         for k, ts in self.bar_sweep(bar, rad_direction).items():
             for t, nq in zip(ts, self.bps[k]["con"]):
                 jit = self.rand.normal(0, 1)
-                nq.events = self.bp_releasers[k](t + self.bp_jitter * jit)
+                nq.events = self.bp_releasers[k](self.np_rng, t + self.bp_jitter * jit)
 
     def update_noise(self):
-        for s in [self.soma, self.dend, self.term]:
+        for s in self.all_dends:
             s.seed_HHst = self.nz_seed
             self.nz_seed += 1
 

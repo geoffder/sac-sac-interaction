@@ -110,11 +110,11 @@ def poisson_bipolar(trans_rate, trans_dur, sust_rate, sust_dur, dt):
     return np.concatenate([trans, sust])
 
 
-def poisson_of_release(rate):
+def poisson_of_release(rng, rate):
     """Takes a 1d ndarray representing a variable release rate and returns an
     array of the same size with poisson generated count of events per interval.
     """
-    return np.concatenate([np.random.poisson(lam=max(r, 0.0), size=1) for r in rate])
+    return np.concatenate([rng.poisson(lam=max(r, 0.0), size=1) for r in rate])
 
 
 def train_maker(rate, dt):
@@ -122,4 +122,4 @@ def train_maker(rate, dt):
     specified by dt (in seconds). Returns a function which takes an onset time
     (ms), and returns a train of event times in milliseconds to be fed to a
     NetQuanta object."""
-    return lambda t: quanta_to_times(poisson_of_release(rate), dt) * 1000 + t
+    return lambda rng, t: quanta_to_times(poisson_of_release(rng, rate), dt) * 1000 + t
