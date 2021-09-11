@@ -118,8 +118,8 @@ class Sac:
         self.sink_nseg = 1
 
         # membrane noise
-        self.dend_nz_factor = 0  # .1  # default NF_HHst = 1
-        self.soma_nz_factor = 0  # .1
+        self.dend_nz_factor = 0.0  # .1  # default NF_HHst = 1
+        self.soma_nz_factor = 0.0  # .1
 
         self.bp_jitter = 0
         self.bp_locs = {"sust": [5], "trans": [25, 45, 65]}
