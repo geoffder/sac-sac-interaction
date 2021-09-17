@@ -110,6 +110,9 @@ class Sac:
         self.term_cal = 0.0
         self.term_can = 0.0003
         self.term_cap = 0.0003
+        self.term_nav1_8 = 0.0
+        self.term_nav1_9 = 0.0
+        self.term_kv3_3 = 0.0
 
         # sink dendrite parameters
         self.sink_dend_locs = [35, 65, 95, 125]
@@ -248,6 +251,8 @@ class Sac:
             sec.Ra = self.dend_ra
             sec.insert("HHst")
             sec.insert("cad")
+            sec.insert("nav1p8")
+            sec.insert("Kv3_3")
             sec.gleak_HHst = self.dend_gleak_hh  # (S/cm2)
             sec.eleak_HHst = self.dend_eleak_hh
             sec.NF_HHst = self.dend_nz_factor
@@ -307,6 +312,12 @@ class Sac:
         term.glbar_HHst = self.term_cal
         term.gcanbar_can = self.term_can
         term.pcabar_newCaP1 = self.term_cap
+        term.insert("nav1p8")
+        term.insert("nav1p9")
+        term.insert("Kv3_3")
+        term.gbar_nav1p8 = self.term_nav1_8
+        term.gbar_nav1p9 = self.term_nav1_9
+        term.gbar_Kv3_3 = self.term_kv3_3
 
         dend.connect(initial)
         term.connect(dend)
