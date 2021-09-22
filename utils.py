@@ -262,6 +262,7 @@ def find_bsln_return(
 ):
     idx = np.argmax(arr[bsln_end:]) + (0 if bsln_end is None else bsln_end)
     last_min = idx
+    min_idx = idx
     bsln = np.mean(arr[bsln_start:bsln_end]) + offset
     if step > 0:
         last = len(arr) - 1
