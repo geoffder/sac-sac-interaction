@@ -78,8 +78,8 @@ class Sac:
         self.dend_diam = 0.2
         self.initial_dend_diam = 0.4
         self.initial_dend_l = 10
-        self.dend_l = 130
-        self.term_l = 10
+        self.dend_l = 120
+        self.term_l = 20
         self.term_diam = 0.2
         self.dend_ra = 100
 
@@ -173,7 +173,7 @@ class Sac:
         }
 
         self.gaba_props = {
-            "loc": 15,  # distance from soma [um]
+            "locs": [15],  # distance from soma [um]
             "thresh": -50,  # pre-synaptic release threshold
             "tau1": 0.5,  # inhibitory conductance rise tau [ms]
             "tau2": 60,  # inhibitory conductance decay tau [ms]
@@ -181,6 +181,7 @@ class Sac:
             "weight": 0.001,  # weight of inhibitory NetCons [uS]
             "delay": 0.5,
         }
+        self.gaba_vel_scaling = lambda v, w: w
 
     def update_params(self, params):
         """Update self members with key-value pairs from supplied dict."""
@@ -202,6 +203,7 @@ class Sac:
             "np_rng",
             "bp_loc_scaling",
             "bp_vel_scaling",
+            "gaba_vel_scaling",
             "bp_releasers",
         ]:
             params.pop(key)
@@ -407,7 +409,7 @@ class Sac:
         dir_sign = 1 if self.forward else -1
         o_x, o_y = self.origin
         self.initial_dend_x_origin = o_x + (
-            (total_l + self.gaba_props["loc"]) / -2 * dir_sign
+            (total_l + self.gaba_props["locs"][0]) / -2 * dir_sign
         )
         self.dend_x_origin = self.initial_dend_x_origin + (
             self.initial_dend_l * dir_sign
@@ -480,30 +482,48 @@ class SacPair:
     def wire_gaba(self):
         self.gaba_syns = {}
         for n, sac in self.sacs.items():
-            if sac.gaba_props["loc"] < sac.initial_dend_l:
-                sac.initial.push()
-                pos = np.round(sac.gaba_props["loc"] / sac.initial_dend_l, decimals=5)
-            else:
-                sac.dend.push()
-                pos = np.round(
-                    (sac.gaba_props["loc"] - sac.initial_dend_l) / sac.dend_l,
-                    decimals=5,
-                )
-            self.gaba_syns[n] = {"syn": h.Exp2Syn(pos)}
-            self.gaba_syns[n]["syn"].tau1 = sac.gaba_props["tau1"]
-            self.gaba_syns[n]["syn"].tau2 = sac.gaba_props["tau2"]
-            self.gaba_syns[n]["syn"].e = sac.gaba_props["rev"]
-            h.pop_section()
+            self.gaba_syns[n] = {"syn": [], "con": []}
+            for loc in sac.gaba_props["locs"]:
+                # TODO: compare this to updated BP positioning code
+                if loc < sac.initial_dend_l:
+                    sac.initial.push()
+                    pos = np.round(loc / sac.initial_dend_l, decimals=5)
+                else:
+                    sac.dend.push()
+                    pos = np.round((loc - sac.initial_dend_l) / sac.dend_l, decimals=5,)
+                syn = h.Exp2Syn(pos)
+                syn.tau1 = sac.gaba_props["tau1"]
+                syn.tau2 = sac.gaba_props["tau2"]
+                syn.e = sac.gaba_props["rev"]
+                self.gaba_syns[n]["syn"].append(syn)
+                h.pop_section()
         for pre, post in [("a", "b"), ("b", "a")]:
-            sac = self.sacs[pre]
-            sac.term.push()
-            self.gaba_syns[pre]["con"] = h.NetCon(
-                sac.term(1)._ref_v,
-                self.gaba_syns[post]["syn"],
-                sac.gaba_props["thresh"],
-                sac.gaba_props["delay"],
-                sac.gaba_props["weight"],
-            )
+            pre_sac = self.sacs[pre]
+            pre_sac.term.push()
+
+            for post_loc, post_syn in zip(
+                self.sacs[post].gaba_props["locs"], self.gaba_syns[post]["syn"]
+            ):
+                tip_dist = post_loc - self.sacs[post].gaba_props["locs"][0]
+                if tip_dist < sac.term_l:
+                    pre_sec = pre_sac.term
+                    pos = np.round(1 - tip_dist / sac.term_l, decimals=5)
+                else:
+                    pre_sec = pre_sac.dend
+                    pos = np.round(
+                        (sac.dend_l + tip_dist - sac.term_l) / sac.dend_l, decimals=5,
+                    )
+
+                pre_sec.push()
+                self.gaba_syns[pre]["con"].append(
+                    h.NetCon(
+                        pre_sec(pos)._ref_v,
+                        post_syn,
+                        pre_sac.gaba_props["thresh"],
+                        pre_sac.gaba_props["delay"],
+                        pre_sac.gaba_props["weight"],
+                    )
+                )
             h.pop_section()
 
     def get_params_dict(self):
@@ -639,6 +659,7 @@ class Runner:
                 print("%.2f" % velocities[i], end=" ", flush=True)
                 self.light_bar["speed"] = velocities[i]
                 self.scale_bps(velocities[i])
+                self.scale_gaba(velocities[i])
                 self.run(self.light_bar, 3)  # index of 0 degrees
 
             print("")  # next line
@@ -688,6 +709,22 @@ class Runner:
                     bps["syn"][i].tau1 = props["tau1"]
                     bps["syn"][i].tau2 = props["tau2"]
 
+    def scale_gaba(self, vel):
+        for (n, sac), syn in zip(
+            self.model.sacs.items(), self.model.gaba_syns.values()
+        ):
+            for con in syn["con"]:
+                con.weight[0] = sac.gaba_vel_scaling(vel, sac.gaba_props["weight"])
+
+    def unscale_bps(self):
+        for n, sac in self.model.sacs.items():
+            for props, bps in zip(sac.bp_props.values(), sac.bps.values()):
+                for i in range(len(bps["syn"])):
+                    # bps["con"][i].weight[0] = props["weight"]
+                    bps["con"][i].weight = props["weight"]
+                    bps["syn"][i].tau1 = props["tau1"]
+                    bps["syn"][i].tau2 = props["tau2"]
+
     def remove_gaba(self):
         if self.orig_gaba_weights is None:
             self.orig_gaba_weights = {}
@@ -696,7 +733,8 @@ class Runner:
             ):
                 self.orig_gaba_weights[n] = sac.gaba_props["weight"]
                 sac.gaba_props["weight"] = 0
-                syn["con"].weight[0] = 0
+                for con in syn["con"]:
+                    con.weight[0] = 0
 
     def restore_gaba(self):
         if self.orig_gaba_weights is not None:
@@ -704,7 +742,8 @@ class Runner:
                 self.model.sacs.items(), self.model.gaba_syns.values()
             ):
                 sac.gaba_props["weight"] = self.orig_gaba_weights[n]
-                syn["con"].weight[0] = self.orig_gaba_weights[n]
+                for con in syn["con"]:
+                    con.weight[0] = self.orig_gaba_weights[n]
             self.orig_gaba_weights = None
 
     def unify_bps(self, taus):
@@ -820,10 +859,12 @@ class Runner:
                         self.data["bps"][n][k][i][s] = []
                         self.recs["bps"][n][k][i][s].record(getattr(syn, "_ref_%s" % s))
 
-            self.recs["gaba"][n] = {"i": h.Vector(), "g": h.Vector()}
-            self.data["gaba"][n] = {"i": [], "g": []}
-            self.recs["gaba"][n]["i"].record(self.model.gaba_syns[n]["syn"]._ref_i)
-            self.recs["gaba"][n]["g"].record(self.model.gaba_syns[n]["syn"]._ref_g)
+            self.recs["gaba"][n], self.data["gaba"][n] = {}, {}
+            for i, syn in enumerate(self.model.gaba_syns[n]["syn"]):
+                self.recs["gaba"][n][i] = {"i": h.Vector(), "g": h.Vector()}
+                self.data["gaba"][n][i] = {"i": [], "g": []}
+                self.recs["gaba"][n][i]["i"].record(syn._ref_i)
+                self.recs["gaba"][n][i]["g"].record(syn._ref_g)
         self.empty_data = deepcopy(self.data)  # for resetting
 
     def place_vc(self):
@@ -860,6 +901,10 @@ class Runner:
                         for i, r in bp_rs.items():
                             for k in ["i", "g"]:
                                 ds[n][typ][i][k].append(np.array(r[k]))
+                elif p == "gaba":
+                    for i in rs[n].keys():
+                        for k in ["i", "g"]:
+                            ds[n][i][k].append(np.array(rs[n][i][k]))
                 else:
                     for k in ["i", "g"]:
                         ds[n][k].append(np.array(rs[n][k]))

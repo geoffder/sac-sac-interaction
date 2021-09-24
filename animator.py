@@ -12,6 +12,9 @@ from matplotlib.animation import FuncAnimation
 # local imports (found in this repo)
 from utils import *
 
+# TODO: right now the multiple GABA synapses are simply summed and represented
+# as a single arrow each on the schematic. Should break them up.
+
 
 class SacSacAnimator:
     def __init__(
@@ -19,10 +22,7 @@ class SacSacAnimator:
         exps,
         exp_params,
         model_params,
-        y_off={
-            "a": 2,
-            "b": -2
-        },
+        y_off={"a": 2, "b": -2},
         bp_offset=2,
         bp_width=3,
         bp_height=5,
@@ -41,6 +41,13 @@ class SacSacAnimator:
                     for m in ["g", "i"]
                 }
                 for n, sac in exps[cond]["bps"].items()
+            }
+            self.exps[cond]["combined_gaba"] = {
+                n: {
+                    m: np.sum([syn[m] for syn in sac.values()], axis=0)
+                    for m in ["g", "i"]
+                }
+                for n, sac in exps[cond]["gaba"].items()
             }
         self.y_off = y_off
         self.bp_offset, self.bp_width, self.bp_height = bp_offset, bp_width, bp_height
@@ -63,61 +70,64 @@ class SacSacAnimator:
     def build_schemes(self):
         return {
             n: {
-                "soma":
-                    patches.Circle(
-                        (ps["soma_x_origin"], ps["origin"][1] + self.y_off[n]),
-                        ps["soma_diam"] / 2,
-                    ),
-                "dend":
-                    patches.Rectangle(
-                        (
-                            ps["initial_dend_x_origin"] - (
-                                (ps["dend_l"] +
-                                 ps["initial_dend_l"]) if not ps["forward"] else 0
-                            ), ps["origin"][1] - (ps["dend_diam"] / 2) + self.y_off[n]
+                "soma": patches.Circle(
+                    (ps["soma_x_origin"], ps["origin"][1] + self.y_off[n]),
+                    ps["soma_diam"] / 2,
+                ),
+                "dend": patches.Rectangle(
+                    (
+                        ps["initial_dend_x_origin"]
+                        - (
+                            (ps["dend_l"] + ps["initial_dend_l"])
+                            if not ps["forward"]
+                            else 0
                         ),
-                        ps["dend_l"] + ps["initial_dend_l"],
-                        1,  # ps["dend_diam"],
-                        fill=True,
+                        ps["origin"][1] - (ps["dend_diam"] / 2) + self.y_off[n],
                     ),
-                "term":
-                    patches.Rectangle(
-                        (
-                            ps["term_x_origin"] -
-                            (ps["term_l"] if not ps["forward"] else 0), ps["origin"][1] -
-                            (ps["dend_diam"] / 2) + self.y_off[n]
-                        ),
-                        ps["term_l"],
-                        1,  # ps["dend_diam"],
-                        fill=True,
+                    ps["dend_l"] + ps["initial_dend_l"],
+                    1,  # ps["dend_diam"],
+                    fill=True,
+                ),
+                "term": patches.Rectangle(
+                    (
+                        ps["term_x_origin"]
+                        - (ps["term_l"] if not ps["forward"] else 0),
+                        ps["origin"][1] - (ps["dend_diam"] / 2) + self.y_off[n],
                     ),
-                "gaba":
-                    patches.Arrow(
-                        ps["gaba_x_loc"],
-                        ps["origin"][1] + self.y_off[n],
-                        0,
-                        self.y_off[n] * -1.5,
-                        width=10,
-                    ),
-                "bps":
-                    {
-                        k: [
-                            patches.Rectangle(
+                    ps["term_l"],
+                    1,  # ps["dend_diam"],
+                    fill=True,
+                ),
+                "gaba": patches.Arrow(
+                    ps["gaba_x_loc"],
+                    ps["origin"][1] + self.y_off[n],
+                    0,
+                    self.y_off[n] * -1.5,
+                    width=10,
+                ),
+                "bps": {
+                    k: [
+                        patches.Rectangle(
+                            (
+                                x - self.bp_width / 2,
                                 (
-                                    x - self.bp_width / 2, (
-                                        y + (
-                                            self.bp_offset
-                                            if ps["forward"] else self.bp_offset * -1
-                                        ) + self.y_off[n] -
-                                        (self.bp_height if not ps["forward"] else 0)
+                                    y
+                                    + (
+                                        self.bp_offset
+                                        if ps["forward"]
+                                        else self.bp_offset * -1
                                     )
+                                    + self.y_off[n]
+                                    - (self.bp_height if not ps["forward"] else 0)
                                 ),
-                                self.bp_width,
-                                self.bp_height,
-                            ) for x, y in zip(ls["x"], ls["y"])
-                        ]
-                        for k, ls in ps["bp_xy_locs"].items()
-                    },
+                            ),
+                            self.bp_width,
+                            self.bp_height,
+                        )
+                        for x, y in zip(ls["x"], ls["y"])
+                    ]
+                    for k, ls in ps["bp_xy_locs"].items()
+                },
             }
             for n, ps in self.model_params.items()
         }
@@ -143,9 +153,11 @@ class SacSacAnimator:
                 for bp in bps:
                     ax.text(
                         bp.get_x() + x_off,
-                        bp.get_y() + (
-                            (bp.get_height() +
-                             y_off) if self.model_params[n]["forward"] else (-2 - y_off)
+                        bp.get_y()
+                        + (
+                            (bp.get_height() + y_off)
+                            if self.model_params[n]["forward"]
+                            else (-2 - y_off)
                         ),
                         "S" if k == "sust" else "T",
                         fontsize=12,
@@ -156,14 +168,30 @@ class SacSacAnimator:
             del (self.fig, self.ax, self.cond_slider, self.vel_slider, self.time_slider)
         if "gridspec_kw" not in plot_kwargs:
             plot_kwargs["gridspec_kw"] = {
-                "height_ratios": [.15, .033, .033, .033, .15, .15, .15, .15, .15],
-                "hspace": .65
+                "height_ratios": [
+                    0.15,
+                    0.033,
+                    0.033,
+                    0.033,
+                    0.15,
+                    0.15,
+                    0.15,
+                    0.15,
+                    0.15,
+                ],
+                "hspace": 0.65,
             }
         self.fig, self.ax = plt.subplots(9, **plot_kwargs)
         (
-            self.scheme_ax, self.cond_slide_ax, self.vel_slide_ax, self.time_slide_ax,
-            self.bp_g_ax, self.gaba_g_ax, self.term_cai_ax, self.term_vm_ax,
-            self.soma_vm_ax
+            self.scheme_ax,
+            self.cond_slide_ax,
+            self.vel_slide_ax,
+            self.time_slide_ax,
+            self.bp_g_ax,
+            self.gaba_g_ax,
+            self.term_cai_ax,
+            self.term_vm_ax,
+            self.soma_vm_ax,
         ) = self.ax
         self.build_cond_slide_ax()
         self.build_vel_slide_ax()
@@ -187,7 +215,7 @@ class SacSacAnimator:
             valmax=(len(self.conds) - 1),
             valinit=0,
             valstep=1,
-            valfmt="%.0f"
+            valfmt="%.0f",
         )
         self.cond_slide_ax.set_title("Condition = %s" % self.cond)
 
@@ -199,7 +227,7 @@ class SacSacAnimator:
             valmax=(len(self.velocities) - 1),
             valinit=0,
             valstep=1,
-            valfmt="%.0f"
+            valfmt="%.0f",
         )
         self.vel_slide_ax.set_title(
             "Velocity = %.2f mm/s" % self.velocities[self.vel_idx]
@@ -213,7 +241,7 @@ class SacSacAnimator:
             valmax=self.exp_params["tstop"],
             valinit=0,
             valstep=self.exp_params["dt"],
-            valfmt="%.3f"
+            valfmt="%.3f",
         )
 
     def bar_loc(self, t):
@@ -238,7 +266,9 @@ class SacSacAnimator:
         end = (self.t_idx + 1) if self.reveal_time else self.n_pts
         lines = {
             n: ax.plot(
-                self.rec_xaxis[:end], rs[rec_key][self.vel_idx][:end], label="sac %s" % n
+                self.rec_xaxis[:end],
+                rs[rec_key][self.vel_idx][:end],
+                label="sac %s" % n,
             )[0]
             for n, rs in self.avg_exps[self.cond][loc].items()
         }
@@ -266,11 +296,11 @@ class SacSacAnimator:
     def build_gaba_g_ax(self):
         self.gaba_g_lines, self.gaba_g_t_marker = self.build_rec_ax(
             self.gaba_g_ax,
-            "gaba",
+            "combined_gaba",
             "g",
             0,
-            self.max_exps[self.cond]["gaba"]["g"],
-            ylbl="GABA Conductance (μS)"
+            self.max_exps[self.cond]["combined_gaba"]["g"],
+            ylbl="GABA Conductance (μS)",
         )
         self.gaba_g_ax.set_xticklabels([])
         self.gaba_g_ax._shared_x_axes.join(self.gaba_g_ax, self.soma_vm_ax)
@@ -282,7 +312,7 @@ class SacSacAnimator:
             "g",
             0,
             self.max_exps[self.cond]["combined_bps"]["g"],
-            ylbl="Total BPC Conductance (μS)"
+            ylbl="Total BPC Conductance (μS)",
         )
         self.bp_g_ax.set_xticklabels([])
         self.bp_g_ax._shared_x_axes.join(self.bp_g_ax, self.soma_vm_ax)
@@ -294,7 +324,7 @@ class SacSacAnimator:
             "cai",
             0,
             self.max_exps[self.cond]["term"]["cai"],
-            ylbl="Terminal [Ca2+] (mM)"
+            ylbl="Terminal [Ca2+] (mM)",
         )
         self.term_cai_ax.set_xticklabels([])
         self.term_cai_ax._shared_x_axes.join(self.term_cai_ax, self.soma_vm_ax)
@@ -329,14 +359,14 @@ class SacSacAnimator:
         for i, (n, line) in enumerate(lines.items()):
             line.set_data(
                 self.rec_xaxis[:end],
-                self.avg_exps[self.cond][loc][n][rec_key][self.vel_idx][:end]
+                self.avg_exps[self.cond][loc][n][rec_key][self.vel_idx][:end],
             )
 
     def update_rec_axes(self):
         self.update_rec(self.term_vm_lines, self.term_vm_t_marker, "term", "v")
         self.update_rec(self.soma_vm_lines, self.soma_vm_t_marker, "soma", "v")
         self.update_rec(self.term_cai_lines, self.term_cai_t_marker, "term", "cai")
-        self.update_rec(self.gaba_g_lines, self.gaba_g_t_marker, "gaba", "g")
+        self.update_rec(self.gaba_g_lines, self.gaba_g_t_marker, "combined_gaba", "g")
         self.update_rec(self.bp_g_lines, self.bp_g_t_marker, "combined_bps", "g")
 
     def update_scheme(self):
@@ -347,29 +377,31 @@ class SacSacAnimator:
         for n, s in self.schemes.items():
             s["soma"].set_color(
                 self.cmap(
-                    (ex["soma"][n]["v"][self.vel_idx, self.t_idx] - mins["soma"]["v"]) /
-                    (maxs["soma"]["v"] - mins["soma"]["v"] + 0.00001)
+                    (ex["soma"][n]["v"][self.vel_idx, self.t_idx] - mins["soma"]["v"])
+                    / (maxs["soma"]["v"] - mins["soma"]["v"] + 0.00001)
                 )
             )
             s["term"].set_color(
                 self.cmap(
-                    (ex["term"][n]["v"][self.vel_idx, self.t_idx] - mins["term"]["v"]) /
-                    (maxs["term"]["v"] - mins["term"]["v"] + 0.00001)
+                    (ex["term"][n]["v"][self.vel_idx, self.t_idx] - mins["term"]["v"])
+                    / (maxs["term"]["v"] - mins["term"]["v"] + 0.00001)
                 )
             )
             # GABA arrow coming from pre-synaptic side, so flip n
             s["gaba"].set_color(
                 self.cmap(
-                    ex["gaba"]["b" if n == "a" else "a"]["g"][self.vel_idx, self.t_idx] /
-                    (maxs["gaba"]["g"] + 0.00001)
+                    ex["combined_gaba"]["b" if n == "a" else "a"]["g"][
+                        self.vel_idx, self.t_idx
+                    ]
+                    / (maxs["combined_gaba"]["g"] + 0.00001)
                 )
             )
             for k, bps in s["bps"].items():
                 for i, b in enumerate(bps):
                     b.set_color(
                         self.cmap(
-                            ex["bps"][n][k][i]["g"][self.vel_idx, self.t_idx] /
-                            (maxs["bps"][k][i]["g"] + .00001)
+                            ex["bps"][n][k][i]["g"][self.vel_idx, self.t_idx]
+                            / (maxs["bps"][k][i]["g"] + 0.00001)
                         )
                     )
 
@@ -378,8 +410,8 @@ class SacSacAnimator:
             del (self.fig, self.ax, self.cond_slider, self.vel_slider, self.time_slider)
         if "gridspec_kw" not in plot_kwargs:
             plot_kwargs["gridspec_kw"] = {
-                "height_ratios": [.25, .25, .25, .25],
-                "hspace": .2
+                "height_ratios": [0.25, 0.25, 0.25, 0.25],
+                "hspace": 0.2,
             }
         self.fig, self.ax = plt.subplots(4, **plot_kwargs)
         (self.scheme_ax, self.bp_g_ax, self.gaba_g_ax, self.term_vm_ax) = self.ax
@@ -395,7 +427,9 @@ class SacSacAnimator:
     def play_velocity_exp(self, cond):
         pass
 
-    def create_vel_gifs(self, out_path, n_frames, vel_idx=0, dt=10, dpi=100, gif_step=30):
+    def create_vel_gifs(
+        self, out_path, n_frames, vel_idx=0, dt=10, dpi=100, gif_step=30
+    ):
         os.makedirs(out_path, exist_ok=True)
         self.term_vm_ax.set_xlim(0, n_frames * dt)
         self.vel_idx = vel_idx
