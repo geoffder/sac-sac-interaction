@@ -368,10 +368,17 @@ class Sac:
                 if locs[i] <= self.initial_dend_l:
                     self.initial.push()
                     pos = np.round(locs[i] / self.initial_dend_l, decimals=5)
-                else:
+                elif locs[i] <= (self.initial_dend_l + self.dend_l):
                     self.dend.push()
                     pos = np.round(
                         max(0, locs[i] - self.initial_dend_l) / self.dend_l, decimals=5
+                    )
+                else:
+                    self.term.push()
+                    pos = np.round(
+                        max(0, locs[i] - self.initial_dend_l - self.dend_l)
+                        / self.term_l,
+                        decimals=5,
                     )
 
                 # Synapse object (source of conductance)
@@ -458,12 +465,15 @@ class Sac:
         }
         return on_times
 
-    def bar_onsets(self, bar, rad_direction):
+    def bar_onsets(self, bar, rad_direction, uniform=False):
         # bare base onset with added jitter
         for k, ts in self.bar_sweep(bar, rad_direction).items():
+            rel_k = "trans" if uniform else k
             for t, nq in zip(ts, self.bps[k]["con"]):
                 jit = self.rand.normal(0, 1)
-                nq.events = self.bp_releasers[k](self.np_rng, t + self.bp_jitter * jit)
+                nq.events = self.bp_releasers[rel_k](
+                    self.np_rng, t + self.bp_jitter * jit
+                )
 
     def update_noise(self):
         for s in self.all_dends:
@@ -511,7 +521,7 @@ class SacPair:
                 else:
                     pre_sec = pre_sac.dend
                     pos = np.round(
-                        (sac.dend_l + tip_dist - sac.term_l) / sac.dend_l, decimals=5,
+                        (sac.dend_l - (tip_dist - sac.term_l)) / sac.dend_l, decimals=5,
                     )
 
                 pre_sec.push()
@@ -529,9 +539,9 @@ class SacPair:
     def get_params_dict(self):
         return {n: sac.get_params_dict() for n, sac in self.sacs.items()}
 
-    def bar_onsets(self, stim, dir_idx):
+    def bar_onsets(self, stim, dir_idx, uniform=False):
         for sac in self.sacs.values():
-            sac.bar_onsets(stim, dir_idx)
+            sac.bar_onsets(stim, dir_idx, uniform=uniform)
 
     def update_noise(self):
         for sac in self.sacs.values():
@@ -631,7 +641,9 @@ class Runner:
         membrane noise seeds and run the model. Calculate somatic response and
         return to calling function."""
         h.init()
-        self.model.bar_onsets(stim, self.dir_rads[dir_idx])
+        self.model.bar_onsets(
+            stim, self.dir_rads[dir_idx], uniform=self.orig_bp_props is not None
+        )
         self.model.update_noise()
 
         self.clear_recordings()
