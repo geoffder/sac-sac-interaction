@@ -283,7 +283,7 @@ class SacSacAnimator:
 
     def build_term_vm_ax(self):
         self.term_vm_lines, self.term_vm_t_marker = self.build_rec_ax(
-            self.term_vm_ax, "term", "v", -70, -35, "Time (ms)", "Terminal Voltage (mV)"
+            self.term_vm_ax, "term", "v", -70, -35, "", "Terminal Voltage (mV)"
         )
         self.term_vm_ax.set_xticklabels([])
         self.term_vm_ax._shared_x_axes.join(self.term_vm_ax, self.soma_vm_ax)
@@ -410,12 +410,20 @@ class SacSacAnimator:
             del (self.fig, self.ax, self.cond_slider, self.vel_slider, self.time_slider)
         if "gridspec_kw" not in plot_kwargs:
             plot_kwargs["gridspec_kw"] = {
-                "height_ratios": [0.25, 0.25, 0.25, 0.25],
+                "height_ratios": [0.1666, 0.1666, 0.1666, 0.1666, 0.1666, 0.1666],
                 "hspace": 0.2,
             }
-        self.fig, self.ax = plt.subplots(4, **plot_kwargs)
-        (self.scheme_ax, self.bp_g_ax, self.gaba_g_ax, self.term_vm_ax) = self.ax
+        self.fig, self.ax = plt.subplots(6, **plot_kwargs)
+        (
+            self.scheme_ax,
+            self.bp_g_ax,
+            self.gaba_g_ax,
+            self.term_cai_ax,
+            self.term_vm_ax,
+            self.soma_vm_ax,
+        ) = self.ax
         self.build_term_vm_ax()
+        self.build_soma_vm_ax()
         self.build_gaba_g_ax()
         self.build_bp_g_ax()
         self.build_term_cai_ax()
