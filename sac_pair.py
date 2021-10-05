@@ -186,6 +186,7 @@ class Sac:
     def update_params(self, params):
         """Update self members with key-value pairs from supplied dict."""
         for k, v in params.items():
+            v = deepcopy(v) if type(v) == dict else v
             self.__dict__[k] = v
 
     def get_params_dict(self):
@@ -529,9 +530,9 @@ class SacPair:
                     h.NetCon(
                         pre_sec(pos)._ref_v,
                         post_syn,
-                        pre_sac.gaba_props["thresh"],
-                        pre_sac.gaba_props["delay"],
-                        pre_sac.gaba_props["weight"],
+                        float(pre_sac.gaba_props["thresh"]),
+                        float(pre_sac.gaba_props["delay"]),
+                        float(pre_sac.gaba_props["weight"]),
                     )
                 )
             h.pop_section()
@@ -743,19 +744,21 @@ class Runner:
             for (n, sac), syn in zip(
                 self.model.sacs.items(), self.model.gaba_syns.values()
             ):
-                self.orig_gaba_weights[n] = sac.gaba_props["weight"]
-                sac.gaba_props["weight"] = 0
+                self.orig_gaba_weights[n] = float(sac.gaba_props["weight"])
+                sac.gaba_props["weight"] = 0.0
                 for con in syn["con"]:
-                    con.weight[0] = 0
+                    con.weight[0] = 0.0
 
     def restore_gaba(self):
         if self.orig_gaba_weights is not None:
             for (n, sac), syn in zip(
                 self.model.sacs.items(), self.model.gaba_syns.values()
             ):
-                sac.gaba_props["weight"] = self.orig_gaba_weights[n]
+                self.model.sacs[n].gaba_props["weight"] = float(
+                    self.orig_gaba_weights[n]
+                )
                 for con in syn["con"]:
-                    con.weight[0] = self.orig_gaba_weights[n]
+                    con.weight[0] = float(self.orig_gaba_weights[n])
             self.orig_gaba_weights = None
 
     def unify_bps(self, taus):
