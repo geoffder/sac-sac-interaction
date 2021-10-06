@@ -198,7 +198,10 @@ def apply_to_data2(f, d1, d2):
         else:
             return f(v1, v2)
 
-    return {k: applyer(v1, v2) for (k, v1), v2 in zip(d1.items(), d2.values())}
+    if type(d1) == dict:
+        return {k: applyer(v1, v2) for (k, v1), v2 in zip(d1.items(), d2.values())}
+    else:
+        return applyer(d1, d2)
 
 
 def stack_pair_data(exp):

@@ -626,6 +626,7 @@ class Runner:
             "dir_inds",
             "circle",
             "empty_data",
+            "empty_vc_data",
             "orig_gaba_weights",
             "orig_bp_props",
             "orig_bp_vel_scaling",
@@ -677,11 +678,17 @@ class Runner:
 
             print("")  # next line
 
+        if self.vc_data is None:
+            all_recs = self.data
+        else:
+            all_recs = {**self.data, "vc": self.vc_data}
+            self.vc_data = deepcopy(self.empty_vc_data)
+
         self.unscale_bps()
         data = {
             "model_params": json.dumps(model_params),
             "exp_params": json.dumps(exp_params),
-            "data": self.stack_data(self.data, n_trials, n_vels),
+            "data": self.stack_data(all_recs, n_trials, n_vels),
         }
         self.data = deepcopy(self.empty_data)  # clear out stored data
 
@@ -882,28 +889,36 @@ class Runner:
                 self.recs["gaba"][n][i]["g"].record(syn._ref_g)
         self.empty_data = deepcopy(self.data)  # for resetting
 
-    def place_vc(self):
-        sac = self.model.sacs["a"]
-        sac.soma.push()
-        self.vc = nrn_objref("vc")
-        self.vc = h.SEClamp(0.5)
-        h.pop_section()
+    def place_vc(self, targets=["a", "b"], hold=-60, block_vgcs=True):
+        self.vc, self.vc_rec, self.vc_data = {}, {}, {}
 
-        # hold target voltage for entire duration
-        self.vc.dur1 = h.tstop
-        self.vc.dur2 = 0.0
-        self.vc.dur3 = 0.0
-        self.vc.amp1 = -60.0
+        for n in targets:
+            sac = self.model.sacs[n]
+            sac.soma.push()
+            vc = nrn_objref("vc")
+            vc = h.SEClamp(0.5)
+            h.pop_section()
 
-        # block voltage-gated conductances
-        for sec in [sac.soma, sac.initial, sac.dend, sac.term]:
-            sec.gnabar_HHst = 0.0
-            sec.gkbar_HHst = 0.0
-            sec.gkmbar_HHst = 0.0
+            # hold target voltage for entire duration
+            vc.dur1 = h.tstop
+            vc.dur2 = 0.0
+            vc.dur3 = 0.0
+            vc.amp1 = hold
 
-        self.vc_rec = h.Vector()
-        self.vc_rec.record(self.vc._ref_i)
-        self.vc_data = []
+            if block_vgcs:
+                for sec in [sac.soma, sac.initial, sac.dend, sac.term]:
+                    sec.gnabar_HHst = 0.0
+                    sec.gkbar_HHst = 0.0
+                    sec.gkmbar_HHst = 0.0
+
+            vc_rec = h.Vector()
+            vc_rec.record(vc._ref_i)
+
+            self.vc_rec[n] = vc_rec
+            self.vc_data[n] = []
+            self.vc[n] = vc
+
+        self.empty_vc_data = deepcopy(self.vc_data)
 
     def dump_recordings(self):
         for (p, rs), ds in zip(self.recs.items(), self.data.values()):
@@ -925,7 +940,8 @@ class Runner:
                         ds[n][k].append(np.array(rs[n][k]))
 
         if self.vc_rec is not None:
-            self.vc_data.append(np.array(self.vc_rec))
+            for n in self.vc_rec.keys():
+                self.vc_data[n].append(np.array(self.vc_rec[n]))
 
     def clear_recordings(self):
         """Clear out all of the recording vectors in the recs dict, accounting for
@@ -939,7 +955,7 @@ class Runner:
                     r.resize(0)
 
         if self.vc_rec is not None:
-            self.vc_rec.resize(0)
+            loop(self.vc_rec.values())
 
         loop(self.recs.values())
 
