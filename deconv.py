@@ -40,6 +40,13 @@ def quantal_size_estimate(arr):
     return 2.0 * np.var(arr) / np.mean(arr)
 
 
+def release_rate(event, quantum):
+    """Inverse fourier transform of event recording by representative quantum."""
+    event_fft = np.fft.rfft(event)
+    quantum_fft = np.fft.rfft(quantum, n=len(event))
+    return np.fft.irfft(event_fft / quantum_fft)
+
+
 def get_quanta(recs, quantum, dt, bin_t=0.05, ceiling=0.9, max_q=5, scale_mode=False):
     """Expects recs to be either a 1-d ndarray, or an ndarray of shape (n_rois,
     trials, time)."""
