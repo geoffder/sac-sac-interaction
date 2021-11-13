@@ -582,6 +582,7 @@ class Runner:
         self.vc = None
         self.vc_rec = None
         self.vc_data = None
+        self.empty_vc_data = None
 
         # schedules the events for the NetCons during model initialization
         self.initialize_handler = h.FInitializeHandler(self.model.init_bipolars)
