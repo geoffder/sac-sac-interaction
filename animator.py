@@ -458,3 +458,95 @@ class SacSacAnimator:
             anim.save(name, dpi=dpi, writer="imagemagick")
 
         self.term_vm_ax.set_xlim(0, self.rec_xaxis.max())
+
+
+def ball_sticks(
+    ax,
+    model_params,
+    y_off={"a": 2, "b": -2},
+    bp_offset=2,
+    bp_width=3,
+    bp_height=5,
+    sust_colour="red",
+    trans_colour="blue",
+    incl_gaba=True,
+):
+    schemes = {
+        n: {
+            "soma": patches.Circle(
+                (ps["soma_x_origin"], ps["origin"][1] + y_off[n]), ps["soma_diam"] / 2,
+            ),
+            "dend": patches.Rectangle(
+                (
+                    ps["initial_dend_x_origin"]
+                    - (
+                        (ps["dend_l"] + ps["initial_dend_l"])
+                        if not ps["forward"]
+                        else 0
+                    ),
+                    ps["origin"][1] - (ps["dend_diam"] / 2) + y_off[n],
+                ),
+                ps["dend_l"] + ps["initial_dend_l"],
+                1,  # ps["dend_diam"],
+                fill=True,
+            ),
+            "term": patches.Rectangle(
+                (
+                    ps["term_x_origin"] - (ps["term_l"] if not ps["forward"] else 0),
+                    ps["origin"][1] - (ps["dend_diam"] / 2) + y_off[n],
+                ),
+                ps["term_l"],
+                1,  # ps["dend_diam"],
+                fill=True,
+            ),
+            "gaba": patches.Arrow(
+                ps["gaba_x_loc"],
+                ps["origin"][1] + y_off[n],
+                0,
+                y_off[n] * -1.5,
+                width=10,
+            ),
+            "bps": {
+                k: [
+                    patches.Rectangle(
+                        (
+                            x - bp_width / 2,
+                            (
+                                y
+                                + (bp_offset if ps["forward"] else bp_offset * -1)
+                                + y_off[n]
+                                - (bp_height if not ps["forward"] else 0)
+                            ),
+                        ),
+                        bp_width,
+                        bp_height,
+                        color=sust_colour if k == "sust" else trans_colour,
+                    )
+                    for x, y in zip(ls["x"], ls["y"])
+                ]
+                for k, ls in ps["bp_xy_locs"].items()
+            },
+        }
+        for n, ps in model_params.items()
+        if n in y_off
+    }
+
+    def loop(ps):
+        if type(ps) == dict:
+            for k, p in ps.items():
+                if incl_gaba or k != "gaba":
+                    loop(p)
+        elif type(ps) == list:
+            for p in ps:
+                loop(p)
+        elif isinstance(ps, patches.Patch):
+            ax.add_patch(ps)
+        else:
+            raise TypeError("All leaves must be patches.")
+
+    loop(schemes)
+    ax.scatter([], [], label="Sustained", c=sust_colour)
+    ax.scatter([], [], label="Transient", c=trans_colour)
+    ax.legend()
+
+    return schemes
