@@ -286,7 +286,7 @@ class SacSacAnimator:
             self.term_vm_ax, "term", "v", -70, -35, "", "Terminal Voltage (mV)"
         )
         self.term_vm_ax.set_xticklabels([])
-        self.term_vm_ax._shared_x_axes.join(self.term_vm_ax, self.soma_vm_ax)
+        self.term_vm_ax.get_shared_x_axes().join(self.term_vm_ax, self.soma_vm_ax)
 
     def build_soma_vm_ax(self):
         self.soma_vm_lines, self.soma_vm_t_marker = self.build_rec_ax(
@@ -303,7 +303,7 @@ class SacSacAnimator:
             ylbl="GABA Conductance (μS)",
         )
         self.gaba_g_ax.set_xticklabels([])
-        self.gaba_g_ax._shared_x_axes.join(self.gaba_g_ax, self.soma_vm_ax)
+        self.gaba_g_ax.get_shared_x_axes().join(self.gaba_g_ax, self.soma_vm_ax)
 
     def build_bp_g_ax(self):
         self.bp_g_lines, self.bp_g_t_marker = self.build_rec_ax(
@@ -315,7 +315,7 @@ class SacSacAnimator:
             ylbl="Total BPC Conductance (μS)",
         )
         self.bp_g_ax.set_xticklabels([])
-        self.bp_g_ax._shared_x_axes.join(self.bp_g_ax, self.soma_vm_ax)
+        self.bp_g_ax.get_shared_x_axes().join(self.bp_g_ax, self.soma_vm_ax)
 
     def build_term_cai_ax(self):
         self.term_cai_lines, self.term_cai_t_marker = self.build_rec_ax(
@@ -327,7 +327,7 @@ class SacSacAnimator:
             ylbl="Terminal [Ca2+] (mM)",
         )
         self.term_cai_ax.set_xticklabels([])
-        self.term_cai_ax._shared_x_axes.join(self.term_cai_ax, self.soma_vm_ax)
+        self.term_cai_ax.get_shared_x_axes().join(self.term_cai_ax, self.soma_vm_ax)
 
     def on_cond_slide(self, v):
         self.cond = self.conds[int(v)]
