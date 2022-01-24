@@ -469,8 +469,20 @@ def ball_sticks(
     bp_height=5,
     sust_colour="red",
     trans_colour="blue",
+    bp_alpha=0.5,
     incl_gaba=True,
 ):
+    solo = len(y_off) == 1
+
+    def get_yoff(n, k, forward):
+        if solo:
+            sust = k == "sust"
+            top = (forward and not sust) or (not forward and sust)
+            off = bp_offset if top else bp_offset / -2 - bp_height
+        else:
+            off = bp_offset if forward else bp_offset * -1 - bp_height
+        return off + y_off[n]
+
     schemes = {
         n: {
             "soma": patches.Circle(
@@ -509,18 +521,12 @@ def ball_sticks(
             "bps": {
                 k: [
                     patches.Rectangle(
-                        (
-                            x - bp_width / 2,
-                            (
-                                y
-                                + (bp_offset if ps["forward"] else bp_offset * -1)
-                                + y_off[n]
-                                - (bp_height if not ps["forward"] else 0)
-                            ),
-                        ),
+                        (x - bp_width / 2, (y + get_yoff(n, k, ps["forward"])),),
                         bp_width,
                         bp_height,
                         color=sust_colour if k == "sust" else trans_colour,
+                        alpha=bp_alpha,
+                        edgecolor=None,
                     )
                     for x, y in zip(ls["x"], ls["y"])
                 ]
@@ -547,6 +553,6 @@ def ball_sticks(
     loop(schemes)
     ax.scatter([], [], label="Sustained", c=sust_colour)
     ax.scatter([], [], label="Transient", c=trans_colour)
-    ax.legend()
+    ax.legend(frameon=False)
 
     return schemes
