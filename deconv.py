@@ -4,8 +4,11 @@ import numpy as np
 def bin_reduce(x, sz, reducer):
     n_bins = int(np.ceil(x.shape[-1] / sz))
     return np.concatenate(
-        [reducer(a, axis=-1, keepdims=True) for a in np.array_split(x, n_bins, axis=-1)],
-        axis=-1
+        [
+            reducer(a, axis=-1, keepdims=True)
+            for a in np.array_split(x, n_bins, axis=-1)
+        ],
+        axis=-1,
     )
 
 
@@ -17,7 +20,7 @@ def bin_mean(x, sz):
     return bin_reduce(x, sz, np.mean)
 
 
-def raster(bins, thresh=1., max_q=3):
+def raster(bins, thresh=1.0, max_q=3):
     return np.clip(np.floor(bins / thresh), a_min=0, a_max=max_q)
 
 
@@ -35,6 +38,13 @@ def sum_quanta(bins, edges, q, dt):
 
 def quantal_size_estimate(arr):
     return 2.0 * np.var(arr) / np.mean(arr)
+
+
+def release_rate(event, quantum):
+    """Inverse fourier transform of event recording by representative quantum."""
+    event_fft = np.fft.rfft(event)
+    quantum_fft = np.fft.rfft(quantum, n=len(event))
+    return np.fft.irfft(event_fft / quantum_fft)
 
 
 def get_quanta(recs, quantum, dt, bin_t=0.05, ceiling=0.9, max_q=5, scale_mode=False):
@@ -58,14 +68,14 @@ def get_quanta(recs, quantum, dt, bin_t=0.05, ceiling=0.9, max_q=5, scale_mode=F
     quanta = raster(
         binned,
         thresh=np.max(binned, axis=-1, keepdims=True) * ceiling / max_q,
-        max_q=max_q
+        max_q=max_q,
     )
     quantal_sum = np.stack(
         [
             sum_quanta(qs, quanta_xaxis, scaled_quantum, dt)
             for qs in quanta.reshape(-1, quanta.shape[-1])
         ],
-        axis=0
+        axis=0,
     ).reshape(n_rois, trials, -1)
     quantal_sum_xaxis = np.arange(quantal_sum.shape[-1]) * dt
 
@@ -73,3 +83,50 @@ def get_quanta(recs, quantum, dt, bin_t=0.05, ceiling=0.9, max_q=5, scale_mode=F
         quanta, quantal_sum = np.squeeze(quanta), np.squeeze(quantal_sum)
 
     return quanta, quanta_xaxis, quantal_sum, quantal_sum_xaxis
+
+
+# TODO: should use the new generator class way that numpy encourages. Create a py_rng
+# object with a seed (as done for hoc random) that is used for number pulling on the
+# python side.
+def poisson_quanta(rate, dt, duration):
+    n = int(duration / dt)
+    return np.random.poisson(lam=dt * rate, size=n)
+
+
+def quanta_to_times(qs, dt):
+    ts = []
+    t = 0.0
+    for n in qs:
+        for _ in range(n):
+            ts.append(t)
+        t += dt
+    return np.array(ts)
+
+
+def times_to_quanta(ts, dt, duration):
+    counts, _edges = np.histogram(ts, bins=int(duration / dt))
+    return counts
+
+
+def poisson_bipolar(trans_rate, trans_dur, sust_rate, sust_dur, dt):
+    """Simplistic biphasic train, starting with a transient rate and duration,
+    followed by the sustained rate and duration. Output is in intervals of
+    dt."""
+    trans = poisson_quanta(trans_rate, dt, trans_dur)
+    sust = poisson_quanta(sust_rate, dt, sust_dur)
+    return np.concatenate([trans, sust])
+
+
+def poisson_of_release(rng, rate):
+    """Takes a 1d ndarray representing a variable release rate and returns an
+    array of the same size with poisson generated count of events per interval.
+    """
+    return np.concatenate([rng.poisson(lam=max(r, 0.0), size=1) for r in rate])
+
+
+def train_maker(rate, dt):
+    """Takes a 1d ndarray representing a variable release rate with an interval
+    specified by dt (in seconds). Returns a function which takes an onset time
+    (ms), and returns a train of event times in milliseconds to be fed to a
+    NetQuanta object."""
+    return lambda rng, t: quanta_to_times(poisson_of_release(rng, rate), dt) * 1000 + t
