@@ -553,6 +553,6 @@ def ball_sticks(
     loop(schemes)
     ax.scatter([], [], label="Sustained", c=sust_colour)
     ax.scatter([], [], label="Transient", c=trans_colour)
-    ax.legend(frameon=False)
+    ax.legend(frameon=False, fontsize=14)
 
     return schemes
