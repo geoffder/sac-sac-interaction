@@ -57,10 +57,10 @@ class AnchoredScaleBar(AnchoredOffsetbox):
                 Rectangle((0, 0), 0, sizey, ec=barcolor, lw=barwidth, fc="none")
             )
 
-        if sizex and labelx:
+        if sizex and labelx is not None:
             self.xlabel = TextArea(labelx, {"fontsize": fontsize}, minimumdescent=False)
             bars = VPacker(children=[bars, self.xlabel], align="center", pad=0, sep=sep)
-        if sizey and labely:
+        if sizey and labely is not None:
             self.ylabel = TextArea(labely, {"fontsize": fontsize})
             bars = HPacker(children=[self.ylabel, bars], align="center", pad=0, sep=sep)
 

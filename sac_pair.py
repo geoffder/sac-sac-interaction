@@ -476,6 +476,15 @@ class Sac:
                     self.np_rng, t + self.bp_jitter * jit
                 )
 
+    def flash(self, onset, uniform=False):
+        for k in self.bps.keys():
+            rel_k = "trans" if uniform else k
+            for nq in self.bps[k]["con"]:
+                jit = self.rand.normal(0, 1)
+                nq.events = self.bp_releasers[rel_k](
+                    self.np_rng, onset + self.bp_jitter * jit
+                )
+
     def update_noise(self):
         for s in self.all_dends:
             s.seed_HHst = self.nz_seed
@@ -539,6 +548,10 @@ class SacPair:
 
     def get_params_dict(self):
         return {n: sac.get_params_dict() for n, sac in self.sacs.items()}
+
+    def flash(self, onset, uniform=False):
+        for sac in self.sacs.values():
+            sac.flash(onset, uniform=uniform)
 
     def bar_onsets(self, stim, dir_idx, uniform=False):
         for sac in self.sacs.values():
@@ -653,6 +666,37 @@ class Runner:
         h.run()
         self.dump_recordings()
         self.model.clear_bipolar_events()
+
+    def flash_run(self, onset, n_trials=10):
+
+        model_params = self.model.get_params_dict()  # for logging
+        exp_params = self.get_params_dict()
+
+        for j in range(n_trials):
+            print("trial %d..." % j, end=" ", flush=True)
+            h.init()
+            self.model.flash(onset, uniform=self.orig_bp_props is not None)
+            self.model.update_noise()
+
+            self.clear_recordings()
+            h.run()
+            self.dump_recordings()
+            self.model.clear_bipolar_events()
+
+        if self.vc_data is None:
+            all_recs = self.data
+        else:
+            all_recs = {**self.data, "vc": self.vc_data}
+            self.vc_data = deepcopy(self.empty_vc_data)
+
+        data = {
+            "model_params": json.dumps(model_params),
+            "exp_params": json.dumps(exp_params),
+            "data": self.stack_data(all_recs, n_trials, 1),
+        }
+        self.data = deepcopy(self.empty_data)  # clear out stored data
+
+        return data
 
     def velocity_run(
         self,
