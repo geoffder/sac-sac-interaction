@@ -87,6 +87,9 @@ class Sac:
         self.soma_na = 0.0  # [S/cm2]
         self.soma_k = 0.005  # [S/cm2]
         self.soma_km = 0.0  # [S/cm2]
+        self.soma_kv3 = 0.0
+        self.soma_kv3_1 = 0.0
+        self.soma_kv3_3 = 0.0
 
         self.soma_gleak_hh = 0.0001667  # [S/cm2]
         # self.soma_eleak_hh = -70.0  # [mV]
@@ -95,9 +98,15 @@ class Sac:
         # dend compartment active properties
         self.initial_k = 0.001  # [S/cm2]
         self.initial_km = 0.0  # [S/cm2]
+        self.initial_kv3 = 0.0
+        self.initial_kv3_1 = 0.0
+        self.initial_kv3_3 = 0.0
 
         self.dend_k = 0.0
         self.dend_km = 0.0
+        self.dend_kv3 = 0.0
+        self.dend_kv3_1 = 0.0
+        self.dend_kv3_3 = 0.0
         self.dend_na = 0.00  # [S/cm2] .03
         self.dend_gleak_hh = 0.0001667  # [S/cm2]
         # self.dend_eleak_hh = -70.0  # [mV]
@@ -106,13 +115,15 @@ class Sac:
         self.term_na = 0.0
         self.term_k = 0.0  # [S/cm2]
         self.term_km = 0.0  # [S/cm2]
+        self.term_kv3 = 0.0
+        self.term_kv3_1 = 0.0
+        self.term_kv3_3 = 0.0
         self.term_cat = 0.0003
         self.term_cal = 0.0
         self.term_can = 0.0003
         self.term_cap = 0.0003
         self.term_nav1_8 = 0.0
         self.term_nav1_9 = 0.0
-        self.term_kv3_3 = 0.0
 
         # sink dendrite parameters
         self.sink_dend_locs = [35, 65, 95, 125]
@@ -220,9 +231,15 @@ class Sac:
 
         soma.insert("HHst")
         soma.insert("cad")
+        soma.insert("Kv3")
+        soma.insert("HT")
+        soma.insert("Kv3_3")
         soma.gnabar_HHst = self.soma_na
         soma.gkbar_HHst = self.soma_k
         soma.gkmbar_HHst = self.soma_km
+        soma.gbar_Kv3 = self.soma_kv3
+        soma.gbar_HT = self.soma_kv3_1
+        soma.gbar_Kv3_3 = self.soma_kv3_3
         soma.gleak_HHst = self.soma_gleak_hh
         soma.eleak_HHst = self.soma_eleak_hh
         soma.NF_HHst = self.soma_nz_factor
@@ -279,6 +296,9 @@ class Sac:
             s.Ra = self.dend_ra
             s.insert("HHst")
             s.insert("cad")
+            s.insert("Kv3")
+            s.insert("HT")
+            s.insert("Kv3_3")
             s.gleak_HHst = self.dend_gleak_hh  # (S/cm2)
             s.eleak_HHst = self.dend_eleak_hh
             s.NF_HHst = self.dend_nz_factor
@@ -300,10 +320,19 @@ class Sac:
         # non terminal potassium densities
         initial.gkbar_HHst = self.initial_k
         initial.gkmbar_HHst = self.initial_km
+        initial.gbar_Kv3 = self.initial_kv3
+        initial.gbar_HT = self.initial_kv3_1
+        initial.gbar_Kv3_3 = self.initial_kv3_3
         dend.gkbar_HHst = self.dend_k
         dend.gkmbar_HHst = self.dend_km
+        dend.gbar_Kv3 = self.dend_kv3
+        dend.gbar_HT = self.dend_kv3_1
+        dend.gbar_Kv3_3 = self.dend_kv3_3
         term.gkbar_HHst = self.term_k
         term.gkmbar_HHst = self.term_km
+        term.gbar_Kv3 = self.dend_kv3
+        term.gbar_HT = self.term_kv3_1
+        term.gbar_Kv3_3 = self.term_kv3_3
 
         # terminal active properties
         term.insert("can")
@@ -317,10 +346,8 @@ class Sac:
         term.pcabar_newCaP1 = self.term_cap
         term.insert("nav1p8")
         term.insert("nav1p9")
-        term.insert("Kv3_3")
         term.gbar_nav1p8 = self.term_nav1_8
         term.gbar_nav1p9 = self.term_nav1_9
-        term.gbar_Kv3_3 = self.term_kv3_3
 
         dend.connect(initial)
         term.connect(dend)
@@ -578,7 +605,8 @@ class Runner:
         self.model = model
 
         # hoc environment parameters
-        self.tstop = 4000  # [ms]
+        # self.tstop = 4000  # [ms]
+        self.tstop = 6000  # [ms]
         self.steps_per_ms = 1  # [10 = 10kHz]
         self.dt = 1  # [ms, .1 = 10kHz]
         # self.v_init = -70
