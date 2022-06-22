@@ -102,12 +102,14 @@ class Sac:
         self.initial_kv3_1 = 0.0
         self.initial_kv3_3 = 0.0
 
+        self.dend_na = 0.00  # [S/cm2] .03
         self.dend_k = 0.0
         self.dend_km = 0.0
         self.dend_kv3 = 0.0
         self.dend_kv3_1 = 0.0
         self.dend_kv3_3 = 0.0
-        self.dend_na = 0.00  # [S/cm2] .03
+        self.dend_can = 0.0003
+        self.dend_cap = 0.0002
         self.dend_gleak_hh = 0.0001667  # [S/cm2]
         # self.dend_eleak_hh = -70.0  # [mV]
         self.dend_eleak_hh = -54.4  # [mV]
@@ -185,6 +187,7 @@ class Sac:
 
         self.gaba_props = {
             "locs": [15],  # distance from soma [um]
+            "calcium": False,  # threshold is cai, rather than vm if True
             "thresh": -50,  # pre-synaptic release threshold
             "tau1": 0.5,  # inhibitory conductance rise tau [ms]
             "tau2": 60,  # inhibitory conductance decay tau [ms]
@@ -192,7 +195,7 @@ class Sac:
             "weight": 0.001,  # weight of inhibitory NetCons [uS]
             "delay": 0.5,
         }
-        self.gaba_vel_scaling = lambda v, w: w
+        self.gaba_vel_scaling = lambda _, w: w
 
     def update_params(self, params):
         """Update self members with key-value pairs from supplied dict."""
@@ -333,6 +336,11 @@ class Sac:
         term.gbar_Kv3 = self.dend_kv3
         term.gbar_HT = self.term_kv3_1
         term.gbar_Kv3_3 = self.term_kv3_3
+
+        dend.insert("can")
+        dend.insert("newCaP1")
+        dend.gcanbar_can = self.dend_can
+        dend.pcabar_newCaP1 = self.dend_cap
 
         # terminal active properties
         term.insert("can")
@@ -562,9 +570,14 @@ class SacPair:
                     )
 
                 pre_sec.push()
+                ref = (
+                    pre_sec(pos)._ref_v
+                    if not pre_sac.gaba_props["calcium"]
+                    else pre_sec(pos)._ref_cai
+                )
                 self.gaba_syns[pre]["con"].append(
                     h.NetCon(
-                        pre_sec(pos)._ref_v,
+                        ref,
                         post_syn,
                         float(pre_sac.gaba_props["thresh"]),
                         float(pre_sac.gaba_props["delay"]),
