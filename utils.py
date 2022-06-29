@@ -262,7 +262,7 @@ def find_rise_start(arr, step=10):
 
 def find_bsln_return(
     arr, bsln_start=0, bsln_end=None, offset=0.0, step=10, pre_step=False
-):
+) -> int:
     idx = np.argmax(arr[bsln_end:]) + (0 if bsln_end is None else bsln_end)
     last_min = idx
     min_idx = idx

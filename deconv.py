@@ -1,5 +1,5 @@
 import numpy as np
-from utils import find_rise_bsln
+from utils import find_rise_bsln, find_bsln_return
 
 
 def bin_reduce(x, sz, reducer):
@@ -53,9 +53,15 @@ def static_to_motion(
     start = (
         find_rise_bsln(rec, **find_rise_kwargs) if rise_start is None else rise_start
     )
-    end = dur + start
+    end = min((dur + start), len(rec))
     mask = np.append(np.ones(end), np.zeros(len(rec) - end))
     return rec * mask
+
+
+def clip_response(r, lead=0, tail=0, **find_kwargs):
+    start = find_rise_bsln(r, **find_kwargs) - lead
+    end = find_bsln_return(r, **find_kwargs) + tail
+    return r[start:end]
 
 
 def release_rate(event, quantum):
