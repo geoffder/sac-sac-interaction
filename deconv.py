@@ -1,4 +1,5 @@
 import numpy as np
+from utils import find_rise_bsln
 
 
 def bin_reduce(x, sz, reducer):
@@ -40,6 +41,23 @@ def quantal_size_estimate(arr):
     return 2.0 * np.var(arr) / np.mean(arr)
 
 
+def static_to_motion(
+    rec, dt, rf=60, spot=400, vel=500, rise_start=None, **find_rise_kwargs
+):
+    """Zero out recording (intended to be response to static stimuli) starting
+    from a duration after the rise of the response determined by the given `rf`
+    and `spot` diameters and the `vel`ocity of the spot. If the `rise_start` index
+    is not provided, it will be calculated with `utils.find_rise_bsln`
+    (using `**find_rise_kwargs`)."""
+    dur = int((rf + spot) / vel / dt)
+    start = (
+        find_rise_bsln(rec, **find_rise_kwargs) if rise_start is None else rise_start
+    )
+    end = dur + start
+    mask = np.append(np.ones(end), np.zeros(len(rec) - end))
+    return rec * mask
+
+
 def release_rate(event, quantum):
     """Inverse fourier transform of event recording by representative quantum."""
     event_fft = np.fft.rfft(event)
@@ -53,7 +71,7 @@ def get_quanta(recs, quantum, dt, bin_t=0.05, ceiling=0.9, max_q=5, scale_mode=F
     orig_shape = recs.shape
     if recs.ndim == 1:
         recs = recs.reshape(1, 1, -1)
-    n_rois, trials, n_pts = recs.shape
+    n_rois, trials, _ = recs.shape
 
     quantum_fft = np.fft.rfft(quantum, n=recs.shape[-1]).reshape(1, 1, -1)
     rec_fft = np.fft.rfft(recs, axis=-1)
@@ -104,7 +122,7 @@ def quanta_to_times(qs, dt):
 
 
 def times_to_quanta(ts, dt, duration):
-    counts, _edges = np.histogram(ts, bins=int(duration / dt))
+    counts, _ = np.histogram(ts, bins=int(duration / dt))
     return counts
 
 
