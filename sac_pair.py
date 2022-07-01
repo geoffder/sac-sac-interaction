@@ -1,15 +1,39 @@
 from neuron import h, gui
 
-# general libraries
 import os
-import h5py as h5
 import json
 from copy import deepcopy
-
 import numpy as np
-import matplotlib.pyplot as plt
-
 from utils import *
+
+
+# TODO: a simple class that can handle the generation / acces of BP releasers
+# that handles multiple velocities. Currently, bp_releasers is part of model config
+# but velocities, which I want to control input, comes later. So instead of having
+# it be set in stone, I need to revamp to allow generation of the velocity
+# approriate rates and quanta generators from them in a way that maintains
+# compatibility with simply providing a [time] (as is default right now, since a toy
+# non-train input may be desired)
+class Releaser:
+    def __init__(
+        self,
+        input_rec,
+        input_dt,
+        quantum,
+        lead_t=0.0,
+        tail_t=0.1,
+        rf=0.06,
+        spot=0.4,
+        model_dt=0.001,
+    ):
+        self.input_rec = input_rec
+        self.input_dt = input_dt
+        self.quantum = quantum
+        self.lead_t = lead_t
+        self.tail_t = tail_t
+        self.rf = rf
+        self.spot = spot
+        self.model_dt = model_dt
 
 
 class NetQuanta:

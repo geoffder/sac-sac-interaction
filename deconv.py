@@ -42,7 +42,7 @@ def quantal_size_estimate(arr):
 
 
 def static_to_motion(
-    rec, dt, rf=60, spot=400, vel=500, rise_start=None, **find_rise_kwargs
+    rec, dt, rf=0.06, spot=0.4, vel=0.5, rise_start=None, **find_rise_kwargs
 ):
     """Zero out recording (intended to be response to static stimuli) starting
     from a duration after the rise of the response determined by the given `rf`
@@ -69,6 +69,34 @@ def release_rate(event, quantum):
     event_fft = np.fft.rfft(event)
     quantum_fft = np.fft.rfft(quantum, n=len(event))
     return np.fft.irfft(event_fft / quantum_fft)
+
+
+def velocity_rate(
+    rec,
+    dt,
+    quantum,
+    vel,
+    lead_t=0.0,
+    tail_t=0.1,
+    rf=0.06,
+    spot=0.4,
+    model_dt=0.001,
+    **find_kwargs
+):
+    start = find_rise_bsln(rec, **find_kwargs)
+    dt_conv = dt / model_dt
+
+    r = static_to_motion(rec, dt, rf=rf, spot=spot, vel=vel, rise_start=start)
+    r = clip_response(
+        r, lead=int(lead_t / dt) + 1, tail=int(tail_t / dt), **find_kwargs
+    )
+    rate = release_rate(r, quantum)
+    rate[rate < 0] = 0.0
+    n_pts = len(rate)
+    rate = np.interp(
+        np.arange(np.ceil(n_pts * dt_conv)) * model_dt, np.arange(n_pts) * dt, rate
+    )
+    return rate
 
 
 def get_quanta(recs, quantum, dt, bin_t=0.05, ceiling=0.9, max_q=5, scale_mode=False):
