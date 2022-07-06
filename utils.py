@@ -355,6 +355,14 @@ def biexp(x, m, t1, t2, b):
     return m * (np.exp(-t2 * x) - np.exp(-t1 * x)) + b
 
 
+def make_biexp(n_pts, dt, tau1, tau2):
+    x = np.arange(n_pts) * dt
+    y = BiexpFitter(1, 10, norm_amp=True).model(
+        t=np.arange(n_pts), tau1=tau1 / dt, tau2=tau2 / dt, y0=1.0,
+    )[0]
+    return x, y
+
+
 def aligned_avg(recs, bsln_start=50, bsln_end=150, offset=0.0, step=1):
     """Aligns provided (positive going) recordings (2d ndarray, shape: (N, T))
     by their rises."""
@@ -373,3 +381,9 @@ def aligned_avg(recs, bsln_start=50, bsln_end=150, offset=0.0, step=1):
         axis=0,
     )
     return aligned
+
+
+def peak_normalize(a, bsln_start=0, bsln_end=None):
+    bsln_end = len(a) if bsln_end is None else bsln_end
+    a -= np.mean(a[bsln_start:bsln_end])
+    return a / np.max(a[bsln_end:])

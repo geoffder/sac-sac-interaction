@@ -37,6 +37,21 @@ def sum_quanta(bins, edges, q, dt):
     return sm
 
 
+def temporal_sum(inputs, dur, dt):
+    n_steps = int(dur / dt)
+    sm = np.zeros(n_steps)
+    for delay, wave in inputs:
+        start = int(delay / dt)
+        n_pts = len(wave)
+        end = min(start + n_pts, n_steps)
+        if crop := start + n_pts - n_steps > 0:
+            sm[start:end] += wave[:-crop]
+        else:
+            sm[start:end] += wave
+
+    return sm
+
+
 def quantal_size_estimate(arr):
     return 2.0 * np.var(arr) / np.mean(arr)
 
@@ -81,7 +96,7 @@ def velocity_rate(
     rf=0.06,
     spot=0.4,
     model_dt=0.001,
-    **find_kwargs
+    **find_kwargs,
 ):
     start = find_rise_bsln(rec, **find_kwargs)
     dt_conv = dt / model_dt
@@ -96,7 +111,7 @@ def velocity_rate(
     rate = np.interp(
         np.arange(np.ceil(n_pts * dt_conv)) * model_dt, np.arange(n_pts) * dt, rate
     )
-    return rate
+    return rate * (model_dt / dt)
 
 
 def get_quanta(recs, quantum, dt, bin_t=0.05, ceiling=0.9, max_q=5, scale_mode=False):
