@@ -44,7 +44,7 @@ def temporal_sum(inputs, dur, dt):
         start = int(delay / dt)
         n_pts = len(wave)
         end = min(start + n_pts, n_steps)
-        if crop := start + n_pts - n_steps > 0:
+        if (crop := start + n_pts - n_steps) > 0:
             sm[start:end] += wave[:-crop]
         else:
             sm[start:end] += wave
@@ -197,3 +197,29 @@ def train_maker(rate, dt):
     (ms), and returns a train of event times in milliseconds to be fed to a
     NetQuanta object."""
     return lambda rng, t: quanta_to_times(poisson_of_release(rng, rate), dt) * 1000 + t
+
+
+def run(
+    velocities,
+    syn_locs,
+    syns,
+    null=True,
+    start_t=0.0,
+    start_loc=150.0,
+    dur=5.0,
+    dt=0.001,
+):
+    v_sign = -1 if null else 1.0
+    out = {}
+    for v in velocities:
+        inputs = []
+        for k in syn_locs.keys():
+            for loc in syn_locs[k]:
+                t = (loc - start_loc) / v * v_sign
+                if t < 0.0:
+                    raise ValueError(
+                        "Negative release time (consider start_loc and whether null)"
+                    )
+                inputs.append((start_t + t, syns[k][v]))
+        out[v] = temporal_sum(inputs, dur, dt)
+    return out
