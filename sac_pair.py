@@ -4,36 +4,8 @@ import os
 import json
 from copy import deepcopy
 import numpy as np
+from releaser import *
 from utils import *
-
-
-# TODO: a simple class that can handle the generation / acces of BP releasers
-# that handles multiple velocities. Currently, bp_releasers is part of model config
-# but velocities, which I want to control input, comes later. So instead of having
-# it be set in stone, I need to revamp to allow generation of the velocity
-# approriate rates and quanta generators from them in a way that maintains
-# compatibility with simply providing a [time] (as is default right now, since a toy
-# non-train input may be desired)
-class Releaser:
-    def __init__(
-        self,
-        input_rec,
-        input_dt,
-        quantum,
-        lead_t=0.0,
-        tail_t=0.1,
-        rf=0.06,
-        spot=0.4,
-        model_dt=0.001,
-    ):
-        self.input_rec = input_rec
-        self.input_dt = input_dt
-        self.quantum = quantum
-        self.lead_t = lead_t
-        self.tail_t = tail_t
-        self.rf = rf
-        self.spot = spot
-        self.model_dt = model_dt
 
 
 class NetQuanta:
@@ -180,7 +152,7 @@ class Sac:
             },
         }
         # first argument is for providing an rng instance
-        self.bp_releasers = {"sust": lambda _rng, t: [t], "trans": lambda _rng, t: [t]}
+        self.bp_releasers = {"sust": mini_releaser, "trans": mini_releaser}
         self.loc_scaling = False
         self.bp_loc_scaling = {
             "sust": {
@@ -220,6 +192,7 @@ class Sac:
             "delay": 0.5,
         }
         self.gaba_vel_scaling = lambda _, w: w
+        self.gaba_releaser = mini_releaser
 
     def update_params(self, params):
         """Update self members with key-value pairs from supplied dict."""
@@ -244,6 +217,7 @@ class Sac:
             "bp_vel_scaling",
             "gaba_vel_scaling",
             "bp_releasers",
+            "gaba_releaser",
         ]:
             params.pop(key)
         return params
@@ -531,8 +505,8 @@ class Sac:
             rel_k = "trans" if uniform else k
             for t, nq in zip(ts, self.bps[k]["con"]):
                 jit = self.rand.normal(0, 1)
-                nq.events = self.bp_releasers[rel_k](
-                    self.np_rng, t + self.bp_jitter * jit
+                nq.events = self.bp_releasers[rel_k].train(
+                    bar["speed"], self.np_rng, t + self.bp_jitter * jit
                 )
 
     def flash(self, onset, uniform=False):
@@ -540,8 +514,8 @@ class Sac:
             rel_k = "trans" if uniform else k
             for nq in self.bps[k]["con"]:
                 jit = self.rand.normal(0, 1)
-                nq.events = self.bp_releasers[rel_k](
-                    self.np_rng, onset + self.bp_jitter * jit
+                nq.events = self.bp_releasers[rel_k].train(
+                    0, self.np_rng, onset + self.bp_jitter * jit
                 )
 
     def update_noise(self):
@@ -551,12 +525,16 @@ class Sac:
 
 
 class SacPair:
-    def __init__(self, sac_params=None):
+    def __init__(self, sac_params=None, wired_gaba=True):
         self.sacs = {
             "a": Sac("a", params=sac_params),
             "b": Sac("b", forward=False, params=sac_params),
         }
-        self.wire_gaba()
+        self.wired_gaba = wired_gaba
+        if wired_gaba:
+            self.wire_gaba()
+        else:
+            self.setup_gaba_releasers()
 
     def wire_gaba(self):
         self.gaba_syns = {}
@@ -610,6 +588,34 @@ class SacPair:
                 )
             h.pop_section()
 
+    def setup_gaba_releasers(self):
+        self.gaba_syns = {}
+        for n, sac in self.sacs.items():
+            self.gaba_syns[n] = {"syn": [], "con": []}
+            for loc in sac.gaba_props["locs"]:
+                # TODO: compare this to updated BP positioning code
+                if loc < sac.initial_dend_l:
+                    sac.initial.push()
+                    pos = np.round(loc / sac.initial_dend_l, decimals=5)
+                else:
+                    sac.dend.push()
+                    pos = np.round((loc - sac.initial_dend_l) / sac.dend_l, decimals=5,)
+                # Synapse object (source of conductance)
+                syn = h.Exp2Syn(pos)
+                syn.tau1 = sac.gaba_props["tau1"]
+                syn.tau2 = sac.gaba_props["tau2"]
+                syn.e = sac.gaba_props["rev"]
+                self.gaba_syns[n]["syn"].append(syn)
+
+                # NetQuanta (wraps NetCon) for scheduling and applying conductance events
+                self.gaba_syns[n]["con"].append(
+                    NetQuanta(
+                        syn, sac.gaba_props["weight"], delay=sac.gaba_props["delay"]
+                    )
+                )
+
+                h.pop_section()  # remove section from access stack
+
     def get_params_dict(self):
         return {n: sac.get_params_dict() for n, sac in self.sacs.items()}
 
@@ -618,8 +624,16 @@ class SacPair:
             sac.flash(onset, uniform=uniform)
 
     def bar_onsets(self, stim, dir_idx, uniform=False):
-        for sac in self.sacs.values():
+        for n, sac in self.sacs.items():
             sac.bar_onsets(stim, dir_idx, uniform=uniform)
+            if not self.wired_gaba:
+                ts = [
+                    stim["start_time"] + (x - stim["x_start"]) / stim["speed"]
+                    for x in sac.gaba_props["locs"]
+                ]
+
+                for t, nq in zip(ts, self.gaba_syns[n]["con"]):
+                    nq.events = sac.gaba_releaser.train(stim.speed, sac.np_rng, t)
 
     def update_noise(self):
         for sac in self.sacs.values():
