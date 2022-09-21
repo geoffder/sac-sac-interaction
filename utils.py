@@ -44,7 +44,7 @@ def pack_hdf(pth, data_dict):
     convention. In `unpack_hdf`, if the key is all digits, it will be converted
     back from string."""
     with h5.File(pth + ".h5", "w") as pckg:
-        pack_dataset(data_dict, pckg)
+        pack_dataset(pckg, data_dict)
 
 
 def unpack_hdf(group):
