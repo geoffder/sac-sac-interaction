@@ -499,19 +499,19 @@ class Sac:
         }
         return on_times
 
-    def bar_onsets(self, bar, rad_direction, uniform=False):
+    def bar_onsets(self, bar, rad_direction, unified=None):
         # bare base onset with added jitter
         for k, ts in self.bar_sweep(bar, rad_direction).items():
-            rel_k = "trans" if uniform else k
+            rel_k = unified if unified is not None else k
             for t, nq in zip(ts, self.bps[k]["con"]):
                 jit = self.rand.normal(0, 1)
                 nq.events = self.bp_releasers[rel_k].train(
                     bar["speed"], self.np_rng, t + self.bp_jitter * jit
                 )
 
-    def flash(self, onset, uniform=False):
+    def flash(self, onset, unified=None):
         for k in self.bps.keys():
-            rel_k = "trans" if uniform else k
+            rel_k = unified if unified is not None else k
             for nq in self.bps[k]["con"]:
                 jit = self.rand.normal(0, 1)
                 nq.events = self.bp_releasers[rel_k].train(
@@ -619,13 +619,13 @@ class SacPair:
     def get_params_dict(self):
         return {n: sac.get_params_dict() for n, sac in self.sacs.items()}
 
-    def flash(self, onset, uniform=False):
+    def flash(self, onset, unified=None):
         for sac in self.sacs.values():
-            sac.flash(onset, uniform=uniform)
+            sac.flash(onset, unified=unified)
 
-    def bar_onsets(self, stim, dir_idx, uniform=False):
+    def bar_onsets(self, stim, dir_idx, unified=None):
         for n, sac in self.sacs.items():
-            sac.bar_onsets(stim, dir_idx, uniform=uniform)
+            sac.bar_onsets(stim, dir_idx, unified=unified)
             if not self.wired_gaba:
                 ts = [
                     stim["start_time"] + (x - stim["x_start"]) / stim["speed"]
@@ -667,6 +667,7 @@ class Runner:
 
         self.config_stimulus()
         self.place_electrodes()
+        self.unified = None
         self.orig_gaba_weights = None
         self.orig_bp_props = None
         self.orig_bp_vel_scaling = None
@@ -720,6 +721,7 @@ class Runner:
             "circle",
             "empty_data",
             "empty_vc_data",
+            "unified",
             "orig_gaba_weights",
             "orig_bp_props",
             "orig_bp_vel_scaling",
@@ -736,9 +738,7 @@ class Runner:
         membrane noise seeds and run the model. Calculate somatic response and
         return to calling function."""
         h.init()
-        self.model.bar_onsets(
-            stim, self.dir_rads[dir_idx], uniform=self.orig_bp_props is not None
-        )
+        self.model.bar_onsets(stim, self.dir_rads[dir_idx], unified=self.unified)
         self.model.update_noise()
 
         self.clear_recordings()
@@ -754,7 +754,7 @@ class Runner:
         for j in range(n_trials):
             print("trial %d..." % j, end=" ", flush=True)
             h.init()
-            self.model.flash(onset, uniform=self.orig_bp_props is not None)
+            self.model.flash(onset, unified=self.unified)
             self.model.update_noise()
 
             self.clear_recordings()
@@ -892,19 +892,22 @@ class Runner:
                     con.weight[0] = float(self.orig_gaba_weights[n])
             self.orig_gaba_weights = None
 
-    def unify_bps(self, taus):
+    def unify_bps(self, bp_type):
+        self.unified = bp_type
         if self.orig_bp_props is None:
             self.orig_bp_props = {}
             self.orig_bp_vel_scaling = {}
             for n, sac in self.model.sacs.items():
                 self.orig_bp_props[n] = deepcopy(sac.bp_props)
                 self.orig_bp_vel_scaling[n] = deepcopy(sac.bp_vel_scaling)
-                sac.bp_props = {k: {**v, **taus} for k, v in sac.bp_props.items()}
-                sac.bp_vel_scaling["sust"] = sac.bp_vel_scaling["trans"]
+                for k in sac.bp_props.keys():
+                    sac.bp_props[k] = sac.bp_props[bp_type]
+                    sac.bp_vel_scaling[k] = sac.bp_vel_scaling[bp_type]
                 for bps in sac.bps.values():
                     for syn in bps["syn"]:
-                        syn.tau1 = taus["tau1"]
-                        syn.tau2 = taus["tau2"]
+                        # unified, so trans is fine either way
+                        syn.tau1 = sac.bp_props["trans"]["tau1"]
+                        syn.tau2 = sac.bp_props["trans"]["tau2"]
 
     def restore_bps(self):
         if self.orig_bp_props is not None:
@@ -921,8 +924,7 @@ class Runner:
         self,
         velocities=[0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
         mech_trials=1,
-        uniform_props={"tau1": 1, "tau2": 12,},
-        conds={"control", "no_gaba", "uniform", "no_mech"},
+        conds={"control", "no_gaba", "all_trans", "no_gaba_trans", "no_gaba_sust"},
     ):
         data = {}
         if "control" in conds:
@@ -939,19 +941,37 @@ class Runner:
             )
             self.restore_gaba()
 
-        if "uniform" in conds:
-            print("Uniform Bipolar run:")
-            self.unify_bps(uniform_props)
-            data["uniform"] = self.velocity_run(
+        if "all_trans" in conds:
+            print("All transient Bipolar run:")
+            self.unify_bps("trans")
+            data["all_trans"] = self.velocity_run(
                 velocities=velocities, n_trials=mech_trials
             )
             self.restore_bps()
 
-        if "no_mech" in conds:
-            print("No Mechanism run:")
+        if "all_sust" in conds:
+            print("All sustained Bipolar run:")
+            self.unify_bps("sust")
+            data["all_sust"] = self.velocity_run(
+                velocities=velocities, n_trials=mech_trials
+            )
+            self.restore_bps()
+
+        if "no_gaba_trans" in conds:
+            print("No Mechanism run (all transient):")
             self.remove_gaba()
-            self.unify_bps(uniform_props)
-            data["no_mechs"] = self.velocity_run(
+            self.unify_bps("trans")
+            data["no_gaba_trans"] = self.velocity_run(
+                velocities=velocities, n_trials=mech_trials
+            )
+            self.restore_gaba()
+            self.restore_bps()
+
+        if "no_gaba_sust" in conds:
+            print("No Mechanism run (all sustained):")
+            self.remove_gaba()
+            self.unify_bps("sust")
+            data["no_gaba_sust"] = self.velocity_run(
                 velocities=velocities, n_trials=mech_trials
             )
             self.restore_gaba()
