@@ -980,22 +980,23 @@ class Runner:
         return data
 
     def bp_distribution_run(
-        self, distributions, dist_trials=1, mirror=False, **velocity_kwargs
+        self, save_path, distributions, dist_trials=1, mirror=False, **velocity_kwargs
     ):
         n_bps = {k: len(locs) for k, locs in self.model.sacs["a"].bp_locs.items()}
-        data = {}
-        for i in range(dist_trials):
-            for j, sac in enumerate(self.model.sacs.values()):
-                if not mirror or not j:
-                    locs = {
-                        k: dist(np.random.uniform(size=n_bps[k])).tolist()
-                        for k, dist in distributions.items()
-                    }
-                sac.bp_locs = locs
-                sac.calc_xy_locs()
-            data[i] = self.velocity_mechanism_run(**velocity_kwargs)
-
-        return data
+        with h5.File(save_path, "w") as pckg:
+            for i in range(dist_trials):
+                print("distribution trial %i (of %i):" % (i, dist_trials))
+                for j, sac in enumerate(self.model.sacs.values()):
+                    if not mirror or not j:
+                        locs = {
+                            k: dist(np.random.uniform(size=n_bps[k])).tolist()
+                            for k, dist in distributions.items()
+                        }
+                    sac.bp_locs = locs
+                    sac.calc_xy_locs()
+                data = self.velocity_mechanism_run(**velocity_kwargs)
+                pack_dataset(pckg, {str(i): data})
+                del data
 
     def place_electrodes(self):
         self.recs = {"soma": {}, "term": {}, "gaba": {}, "bps": {}}
