@@ -1,4 +1,7 @@
-from neuron import h, gui
+# from neuron import h, gui
+from neuron import h
+
+h.load_file("stdgui.hoc")  # headless, still sets up environment
 
 import os
 import json
@@ -51,7 +54,7 @@ class Sac:
             self.update_params(params)
         self.name = name
         self.forward = forward  # soma (left) to dendrite (right)
-        self.seed = seed  # NOTE: if separate rands like this, must use far apart seeds
+        self.seed = seed
         self.rand = h.Random(seed)
         self.nz_seed = 1  # noise seed for HHst
         self.np_rng = np.random.default_rng(seed)
@@ -74,7 +77,7 @@ class Sac:
         self.dend_diam = 0.2
         self.initial_dend_diam = 0.4
         self.initial_dend_l = 10
-        self.dend_l = 120
+        self.dend_l = 140
         self.term_l = 20
         self.term_diam = 0.2
         self.dend_ra = 100
@@ -369,26 +372,28 @@ class Sac:
 
     def create_synapses(self):
         # create *named* hoc objects for each synapse (for gui compatibility)
-        h(
-            "objref sust_bps_%s[%i], trans_bps_%s[%i]"
-            % (
-                self.name,
-                len(self.bp_locs["sust"]),
-                self.name,
-                len(self.bp_locs["trans"]),
-            )
-        )
+        # h(
+        #     "objref sust_bps_%s[%i], trans_bps_%s[%i]"
+        #     % (
+        #         self.name,
+        #         len(self.bp_locs["sust"]),
+        #         self.name,
+        #         len(self.bp_locs["trans"]),
+        #     )
+        # )
 
         # complete synapses are made up of a NetStim, Syn, and NetCon
         self.bps = {
             "sust": {
                 # "stim": [],
-                "syn": getattr(h, "sust_bps_%s" % self.name),
+                # "syn": getattr(h, "sust_bps_%s" % self.name),
+                "syn": [],
                 "con": [],
             },
             "trans": {
                 # "stim": [],
-                "syn": getattr(h, "trans_bps_%s" % self.name),
+                # "syn": getattr(h, "trans_bps_%s" % self.name),
+                "syn": [],
                 "con": [],
             },
         }
@@ -410,13 +415,17 @@ class Sac:
                 else:
                     self.term.push()
                     pos = np.round(
-                        max(0, locs[i] - self.initial_dend_l - self.dend_l)
+                        min(
+                            max(0, locs[i] - self.initial_dend_l - self.dend_l),
+                            self.term_l,
+                        )
                         / self.term_l,
                         decimals=5,
                     )
 
                 # Synapse object (source of conductance)
-                syns["syn"][i] = h.Exp2Syn(pos)
+                # syns["syn"][i] = h.Exp2Syn(pos)
+                syns["syn"].append(h.Exp2Syn(pos))
                 syns["syn"][i].tau1 = props["tau1"]
                 syns["syn"][i].tau2 = props["tau2"]
                 syns["syn"][i].e = props["rev"]
@@ -525,10 +534,10 @@ class Sac:
 
 
 class SacPair:
-    def __init__(self, sac_params=None, wired_gaba=True):
+    def __init__(self, sac_params=None, wired_gaba=True, seed=0):
         self.sacs = {
-            "a": Sac("a", params=sac_params),
-            "b": Sac("b", forward=False, params=sac_params),
+            "a": Sac("a", params=sac_params, seed=seed),
+            "b": Sac("b", forward=False, params=sac_params, seed=seed + 1),
         }
         self.wired_gaba = wired_gaba
         if wired_gaba:
@@ -682,6 +691,7 @@ class Runner:
 
     def set_hoc_params(self):
         """Set hoc NEURON environment model run parameters."""
+        h.finitialize()
         h.tstop = self.tstop
         h.steps_per_ms = self.steps_per_ms
         h.dt = self.dt
@@ -737,7 +747,7 @@ class Runner:
         """Initialize model, set synapse onset and release numbers, update
         membrane noise seeds and run the model. Calculate somatic response and
         return to calling function."""
-        h.init()
+        h.finitialize()
         self.model.bar_onsets(stim, self.dir_rads[dir_idx], unified=self.unified)
         self.model.update_noise()
 
@@ -753,7 +763,7 @@ class Runner:
 
         for j in range(n_trials):
             print("trial %d..." % j, end=" ", flush=True)
-            h.init()
+            h.finitialize()
             self.model.flash(onset, unified=self.unified)
             self.model.update_noise()
 
@@ -782,6 +792,7 @@ class Runner:
         velocities=[0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
         n_trials=1,
         prefix="",
+        quiet=False,
     ):
         """"""
         n_vels = len(velocities)
@@ -791,16 +802,19 @@ class Runner:
         exp_params["velocities"] = velocities
 
         for j in range(n_trials):
-            print("trial %d..." % j, end=" ", flush=True)
+            if not quiet:
+                print("trial %d..." % j, end=" ", flush=True)
 
             for i in range(n_vels):
-                print("%.2f" % velocities[i], end=" ", flush=True)
+                if not quiet:
+                    print("%.2f" % velocities[i], end=" ", flush=True)
                 self.light_bar["speed"] = velocities[i]
                 self.scale_bps(velocities[i])
                 self.scale_gaba(velocities[i])
                 self.run(self.light_bar, 3)  # index of 0 degrees
 
-            print("")  # next line
+            if not quiet:
+                print("")  # next line
 
         if self.vc_data is None:
             all_recs = self.data
@@ -925,54 +939,61 @@ class Runner:
         velocities=[0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
         mech_trials=1,
         conds={"control", "no_gaba", "all_trans", "no_gaba_trans", "no_gaba_sust"},
+        quiet=False,
     ):
         data = {}
         if "control" in conds:
-            print("Control run:")
+            if not quiet:
+                print("Control run:")
             data["control"] = self.velocity_run(
-                velocities=velocities, n_trials=mech_trials
+                velocities=velocities, n_trials=mech_trials, quiet=quiet
             )
 
         if "no_gaba" in conds:
-            print("No GABA run:")
+            if not quiet:
+                print("No GABA run:")
             self.remove_gaba()
             data["no_gaba"] = self.velocity_run(
-                velocities=velocities, n_trials=mech_trials
+                velocities=velocities, n_trials=mech_trials, quiet=quiet
             )
             self.restore_gaba()
 
         if "all_trans" in conds:
-            print("All transient Bipolar run:")
+            if not quiet:
+                print("All transient Bipolar run:")
             self.unify_bps("trans")
             data["all_trans"] = self.velocity_run(
-                velocities=velocities, n_trials=mech_trials
+                velocities=velocities, n_trials=mech_trials, quiet=quiet
             )
             self.restore_bps()
 
         if "all_sust" in conds:
-            print("All sustained Bipolar run:")
+            if not quiet:
+                print("All sustained Bipolar run:")
             self.unify_bps("sust")
             data["all_sust"] = self.velocity_run(
-                velocities=velocities, n_trials=mech_trials
+                velocities=velocities, n_trials=mech_trials, quiet=quiet
             )
             self.restore_bps()
 
         if "no_gaba_trans" in conds:
-            print("No Mechanism run (all transient):")
+            if not quiet:
+                print("No Mechanism run (all transient):")
             self.remove_gaba()
             self.unify_bps("trans")
             data["no_gaba_trans"] = self.velocity_run(
-                velocities=velocities, n_trials=mech_trials
+                velocities=velocities, n_trials=mech_trials, quiet=quiet
             )
             self.restore_gaba()
             self.restore_bps()
 
         if "no_gaba_sust" in conds:
-            print("No Mechanism run (all sustained):")
+            if not quiet:
+                print("No Mechanism run (all sustained):")
             self.remove_gaba()
             self.unify_bps("sust")
             data["no_gaba_sust"] = self.velocity_run(
-                velocities=velocities, n_trials=mech_trials
+                velocities=velocities, n_trials=mech_trials, quiet=quiet
             )
             self.restore_gaba()
             self.restore_bps()
@@ -985,7 +1006,7 @@ class Runner:
         n_bps = {k: len(locs) for k, locs in self.model.sacs["a"].bp_locs.items()}
         with h5.File(save_path, "w") as pckg:
             for i in range(dist_trials):
-                print("distribution trial %i (of %i):" % (i, dist_trials))
+                print("distribution trial %i (of %i):" % (i + 1, dist_trials))
                 for j, sac in enumerate(self.model.sacs.values()):
                     if not mirror or not j:
                         locs = {
@@ -1121,7 +1142,7 @@ class Runner:
         inputs = self.model.sacs["a"].bps["trans"]["con"]
         for i, nq in enumerate(inputs):
             print("synapse %i..." % i, end=" ", flush=True)
-            h.init()
+            h.finitialize()
             nq.events = times
             for j in range(n_trials):
                 print("%i" % j, end=" ", flush=True)

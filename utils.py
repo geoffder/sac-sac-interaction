@@ -11,8 +11,9 @@ import symfit as sf
 
 def nrn_section(name):
     """Create NEURON hoc section, and return a corresponding python object."""
-    h("create " + name)
-    return h.__getattribute__(name)
+    return h.Section(name=name)
+    # h("create " + name)
+    # return h.__getattribute__(name)
 
 
 def nrn_objref(name):
