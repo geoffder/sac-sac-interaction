@@ -920,8 +920,8 @@ class Runner:
                 for bps in sac.bps.values():
                     for syn in bps["syn"]:
                         # unified, so trans is fine either way
-                        syn.tau1 = sac.bp_props["trans"]["tau1"]
-                        syn.tau2 = sac.bp_props["trans"]["tau2"]
+                        syn.tau1 = sac.bp_props[bp_type]["tau1"]
+                        syn.tau2 = sac.bp_props[bp_type]["tau2"]
 
     def restore_bps(self):
         if self.orig_bp_props is not None:
