@@ -658,10 +658,11 @@ class SacPair:
 
 
 class Runner:
-    def __init__(self, model, data_path=""):
-        self.data_path = data_path
-        if not os.path.isdir(data_path):
-            os.makedirs(data_path)
+    # def __init__(self, model, data_path=""):
+    #     self.data_path = data_path
+    #     if not os.path.isdir(data_path):
+    #         os.makedirs(data_path)
+    def __init__(self, model):
         self.model = model
 
         # hoc environment parameters
