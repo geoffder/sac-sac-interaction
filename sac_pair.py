@@ -658,10 +658,6 @@ class SacPair:
 
 
 class Runner:
-    # def __init__(self, model, data_path=""):
-    #     self.data_path = data_path
-    #     if not os.path.isdir(data_path):
-    #         os.makedirs(data_path)
     def __init__(self, model):
         self.model = model
 
@@ -1166,16 +1162,3 @@ class Runner:
             "data": self.stack_data(all_recs, len(inputs), n_trials),
         }
         return data
-
-
-if __name__ == "__main__":
-    # h.xopen("sac_pair.ses")  # open neuron gui session
-    h.xopen("pair.ses")  # open neuron gui session
-    base_path = "/mnt/Data/NEURONoutput/sac_sac/"
-    data_path = base_path + "test_run/"
-    os.makedirs(data_path, exist_ok=True)
-
-    model = SacPair()
-    runner = Runner(model, data_path=data_path)
-    # data = runner.velocity_run()
-    # pack_hdf(data_path + "test", data)
