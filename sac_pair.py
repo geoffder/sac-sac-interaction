@@ -912,8 +912,10 @@ class Runner:
                 self.orig_bp_props[n] = deepcopy(sac.bp_props)
                 self.orig_bp_vel_scaling[n] = deepcopy(sac.bp_vel_scaling)
                 for k in sac.bp_props.keys():
-                    sac.bp_props[k] = sac.bp_props[bp_type]
-                    sac.bp_vel_scaling[k] = sac.bp_vel_scaling[bp_type]
+                    sac.bp_props[k] = deepcopy(self.orig_bp_props[n][bp_type])
+                    sac.bp_vel_scaling[k] = deepcopy(
+                        self.orig_bp_vel_scaling[n][bp_type]
+                    )
                 for bps in sac.bps.values():
                     for syn in bps["syn"]:
                         # unified, so trans is fine either way
