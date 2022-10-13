@@ -119,7 +119,7 @@ class Sac:
         self.term_kv3 = 0.0
         self.term_kv3_1 = 0.0
         self.term_kv3_3 = 0.0
-        self.term_cat = 0.0003
+        self.term_cat = 0.000
         self.term_cal = 0.0
         self.term_can = 0.0003
         self.term_cap = 0.0003
