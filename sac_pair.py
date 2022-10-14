@@ -108,7 +108,13 @@ class Sac:
         self.dend_kv3_1 = 0.0
         self.dend_kv3_3 = 0.0
         self.dend_can = 0.0003
+        self.dend_canrgc = 0.0
         self.dend_cap = 0.0002
+        self.dend_carMed = 0.0
+        self.dend_nav1_8 = 0.0
+        # self.dend_canLindroos = 0.0
+        # self.dend_caqLindroos = 0.0
+        # self.dend_carLindroos = 0.0
         self.dend_gleak_hh = 0.0001667  # [S/cm2]
         # self.dend_eleak_hh = -70.0  # [mV]
         self.dend_eleak_hh = -54.4  # [mV]
@@ -122,7 +128,12 @@ class Sac:
         self.term_cat = 0.000
         self.term_cal = 0.0
         self.term_can = 0.0003
+        self.term_canrgc = 0.0
         self.term_cap = 0.0003
+        self.term_carMed = 0.0
+        # self.term_canLindroos = 0.0
+        # self.term_caqLindroos = 0.0
+        # self.term_carLindroos = 0.0
         self.term_nav1_8 = 0.0
         self.term_nav1_9 = 0.0
 
@@ -339,24 +350,46 @@ class Sac:
         term.gbar_Kv3_3 = self.term_kv3_3
 
         dend.insert("can")
+        dend.insert("canrgc")
         dend.insert("newCaP1")
+        # dend.insert("carMed")
+        # dend.insert("canLindroos")
+        # dend.insert("caqLindroos")
+        # dend.insert("carLindroos")
         dend.gcanbar_can = self.dend_can
+        dend.gbar_canrgc = self.dend_canrgc
         dend.pcabar_newCaP1 = self.dend_cap
+        # dend.gcabar_carMed = self.dend_carMed
+        # dend.pbar_canLindroos = self.dend_canLindroos
+        # dend.pbar_caqLindroos = self.dend_caqLindroos
+        # dend.pbar_carLindroos = self.dend_carLindroos
+        dend.insert("nav1p8")
+        dend.gbar_nav1p8 = self.dend_nav1_8
 
         # terminal active properties
         term.insert("can")
+        term.insert("canrgc")
         term.insert("newCaP1")
+        # term.insert("carMed")
+        # term.insert("canLindroos")
+        # term.insert("caqLindroos")
+        # term.insert("carLindroos")
         term.gnabar_HHst = self.term_na
         term.gtbar_HHst = self.term_cat
         term.glbar_HHst = self.term_cal
         term.gtbar_HHst = self.term_cat
         term.glbar_HHst = self.term_cal
         term.gcanbar_can = self.term_can
+        term.gbar_canrgc = self.term_canrgc
         term.pcabar_newCaP1 = self.term_cap
+        # term.gcabar_carMed = self.term_carMed
+        # term.pbar_canLindroos = self.term_canLindroos
+        # term.pbar_caqLindroos = self.term_caqLindroos
+        # term.pbar_carLindroos = self.term_carLindroos
         term.insert("nav1p8")
-        term.insert("nav1p9")
+        # term.insert("nav1p9")
         term.gbar_nav1p8 = self.term_nav1_8
-        term.gbar_nav1p9 = self.term_nav1_9
+        # term.gbar_nav1p9 = self.term_nav1_9
 
         dend.connect(initial)
         term.connect(dend)
