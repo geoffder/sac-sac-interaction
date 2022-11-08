@@ -64,7 +64,7 @@ def static_to_motion(
     and `spot` diameters and the `vel`ocity of the spot. If the `rise_start` index
     is not provided, it will be calculated with `utils.find_rise_bsln`
     (using `**find_rise_kwargs`)."""
-    dur = int((rf + spot) / vel / dt)
+    dur = int((rf + spot) / vel / dt) if vel > 0.0 else len(rec)
     start = (
         find_rise_bsln(rec, **find_rise_kwargs) if rise_start is None else rise_start
     )
