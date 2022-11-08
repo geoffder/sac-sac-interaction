@@ -197,16 +197,11 @@ class Sac:
 
         self.gaba_props = {
             "locs": [15],  # distance from soma [um]
-            "calcium": False,  # threshold is cai, rather than vm if True
-            "thresh": -50,  # pre-synaptic release threshold
-            "tau1": 0.5,  # inhibitory conductance rise tau [ms]
-            "tau2": 60,  # inhibitory conductance decay tau [ms]
             "rev": -60,  # inhibitory reversal potential [mV]
-            "weight": 0.001,  # weight of inhibitory NetCons [uS]
-            "delay": 0.5,
+            "weight": 0.02,  # cai conversion (g = k * capre^3) [uS/mM3]
+            "order": 3,
         }
         self.gaba_vel_scaling = lambda _, w: w
-        self.gaba_releaser = mini_releaser
 
     def update_params(self, params):
         """Update self members with key-value pairs from supplied dict."""
@@ -231,7 +226,6 @@ class Sac:
             "bp_vel_scaling",
             "gaba_vel_scaling",
             "bp_releasers",
-            "gaba_releaser",
         ]:
             params.pop(key)
         return params
@@ -551,14 +545,15 @@ class Sac:
                     bar["speed"], self.np_rng, t + self.bp_jitter * jit
                 )
 
-    def flash(self, onset, unified=None):
+    def flash(self, onset, pr=1.0, unified=None):
         for k in self.bps.keys():
             rel_k = unified if unified is not None else k
             for nq in self.bps[k]["con"]:
-                jit = self.rand.normal(0, 1)
-                nq.events = self.bp_releasers[rel_k].train(
-                    0, self.np_rng, onset + self.bp_jitter * jit
-                )
+                if self.rand.uniform(0, 1) <= pr:
+                    jit = self.rand.normal(0, 1)
+                    nq.events = self.bp_releasers[rel_k].train(
+                        0, self.np_rng, onset + self.bp_jitter * jit
+                    )
 
     def update_noise(self):
         for s in self.all_dends:
@@ -573,109 +568,63 @@ class SacPair:
             "b": Sac("b", forward=False, params=sac_params, seed=seed + 1),
         }
         self.wired_gaba = wired_gaba
-        if wired_gaba:
-            self.wire_gaba()
-        else:
-            self.setup_gaba_releasers()
+        self.wire_gaba()
 
     def wire_gaba(self):
         self.gaba_syns = {}
         for n, sac in self.sacs.items():
-            self.gaba_syns[n] = {"syn": [], "con": []}
+            self.gaba_syns[n] = []
             for loc in sac.gaba_props["locs"]:
-                # TODO: compare this to updated BP positioning code
-                if loc < sac.initial_dend_l:
+                if loc <= sac.initial_dend_l:
                     sac.initial.push()
                     pos = np.round(loc / sac.initial_dend_l, decimals=5)
-                else:
+                elif loc <= (sac.initial_dend_l + sac.dend_l):
                     sac.dend.push()
-                    pos = np.round((loc - sac.initial_dend_l) / sac.dend_l, decimals=5,)
-                syn = h.Exp2Syn(pos)
-                syn.tau1 = sac.gaba_props["tau1"]
-                syn.tau2 = sac.gaba_props["tau2"]
+                    pos = np.round(
+                        max(0, loc - sac.initial_dend_l) / sac.dend_l, decimals=5
+                    )
+                else:
+                    sac.term.push()
+                    pos = np.round(
+                        min(max(0, loc - sac.initial_dend_l - sac.dend_l), sac.term_l,)
+                        / sac.term_l,
+                        decimals=5,
+                    )
+                syn = h.GradSyn(pos)
+                syn.k = sac.gaba_props["weight"]
                 syn.e = sac.gaba_props["rev"]
-                self.gaba_syns[n]["syn"].append(syn)
+                syn.order = sac.gaba_props["order"]
+                self.gaba_syns[n].append(syn)
                 h.pop_section()
         for pre, post in [("a", "b"), ("b", "a")]:
             pre_sac = self.sacs[pre]
-            pre_sac.term.push()
 
             for post_loc, post_syn in zip(
-                self.sacs[post].gaba_props["locs"], self.gaba_syns[post]["syn"]
+                self.sacs[post].gaba_props["locs"], self.gaba_syns[post]
             ):
                 tip_dist = post_loc - self.sacs[post].gaba_props["locs"][0]
-                if tip_dist < sac.term_l:
+                if tip_dist < pre_sac.term_l:
                     pre_sec = pre_sac.term
-                    pos = np.round(1 - tip_dist / sac.term_l, decimals=5)
+                    pos = np.round(1 - tip_dist / pre_sac.term_l, decimals=5)
                 else:
                     pre_sec = pre_sac.dend
                     pos = np.round(
-                        (sac.dend_l - (tip_dist - sac.term_l)) / sac.dend_l, decimals=5,
+                        (pre_sac.dend_l - (tip_dist - pre_sac.term_l)) / pre_sac.dend_l,
+                        decimals=5,
                     )
 
-                pre_sec.push()
-                ref = (
-                    pre_sec(pos)._ref_v
-                    if not pre_sac.gaba_props["calcium"]
-                    else pre_sec(pos)._ref_cai
-                )
-                self.gaba_syns[pre]["con"].append(
-                    h.NetCon(
-                        ref,
-                        post_syn,
-                        float(pre_sac.gaba_props["thresh"]),
-                        float(pre_sac.gaba_props["delay"]),
-                        float(pre_sac.gaba_props["weight"]),
-                    )
-                )
-            h.pop_section()
-
-    def setup_gaba_releasers(self):
-        self.gaba_syns = {}
-        for n, sac in self.sacs.items():
-            self.gaba_syns[n] = {"syn": [], "con": []}
-            for loc in sac.gaba_props["locs"]:
-                # TODO: compare this to updated BP positioning code
-                if loc < sac.initial_dend_l:
-                    sac.initial.push()
-                    pos = np.round(loc / sac.initial_dend_l, decimals=5)
-                else:
-                    sac.dend.push()
-                    pos = np.round((loc - sac.initial_dend_l) / sac.dend_l, decimals=5,)
-                # Synapse object (source of conductance)
-                syn = h.Exp2Syn(pos)
-                syn.tau1 = sac.gaba_props["tau1"]
-                syn.tau2 = sac.gaba_props["tau2"]
-                syn.e = sac.gaba_props["rev"]
-                self.gaba_syns[n]["syn"].append(syn)
-
-                # NetQuanta (wraps NetCon) for scheduling and applying conductance events
-                self.gaba_syns[n]["con"].append(
-                    NetQuanta(
-                        syn, sac.gaba_props["weight"], delay=sac.gaba_props["delay"]
-                    )
-                )
-
-                h.pop_section()  # remove section from access stack
+                h.setpointer(pre_sec(pos)._ref_cai, "capre", post_syn)
 
     def get_params_dict(self):
         return {n: sac.get_params_dict() for n, sac in self.sacs.items()}
 
-    def flash(self, onset, unified=None):
+    def flash(self, onset, pr=1.0, unified=None):
         for sac in self.sacs.values():
-            sac.flash(onset, unified=unified)
+            sac.flash(onset, pr=pr, unified=unified)
 
     def bar_onsets(self, stim, dir_idx, unified=None):
         for n, sac in self.sacs.items():
             sac.bar_onsets(stim, dir_idx, unified=unified)
-            if not self.wired_gaba:
-                ts = [
-                    stim["start_time"] + (x - stim["x_start"]) / stim["speed"]
-                    for x in sac.gaba_props["locs"]
-                ]
-
-                for t, nq in zip(ts, self.gaba_syns[n]["con"]):
-                    nq.events = sac.gaba_releaser.train(stim.speed, sac.np_rng, t)
 
     def update_noise(self):
         for sac in self.sacs.values():
@@ -786,7 +735,7 @@ class Runner:
         self.dump_recordings()
         self.model.clear_bipolar_events()
 
-    def flash_run(self, onset, n_trials=10):
+    def flash_run(self, onset, pr=1.0, n_trials=10):
 
         model_params = self.model.get_params_dict()  # for logging
         exp_params = self.get_params_dict()
@@ -794,7 +743,7 @@ class Runner:
         for j in range(n_trials):
             print("trial %d..." % j, end=" ", flush=True)
             h.finitialize()
-            self.model.flash(onset, unified=self.unified)
+            self.model.flash(onset, pr=pr, unified=self.unified)
             self.model.update_noise()
 
             self.clear_recordings()
@@ -901,8 +850,8 @@ class Runner:
         for (n, sac), syn in zip(
             self.model.sacs.items(), self.model.gaba_syns.values()
         ):
-            for con in syn["con"]:
-                con.weight[0] = sac.gaba_vel_scaling(vel, sac.gaba_props["weight"])
+            for s in syn:
+                s.k = sac.gaba_vel_scaling(vel, sac.gaba_props["weight"])
 
     def unscale_bps(self):
         for n, sac in self.model.sacs.items():
@@ -921,8 +870,8 @@ class Runner:
             ):
                 self.orig_gaba_weights[n] = float(sac.gaba_props["weight"])
                 sac.gaba_props["weight"] = 0.0
-                for con in syn["con"]:
-                    con.weight[0] = 0.0
+                for s in syn:
+                    s.k = 0.0
 
     def restore_gaba(self):
         if self.orig_gaba_weights is not None:
@@ -932,8 +881,8 @@ class Runner:
                 self.model.sacs[n].gaba_props["weight"] = float(
                     self.orig_gaba_weights[n]
                 )
-                for con in syn["con"]:
-                    con.weight[0] = float(self.orig_gaba_weights[n])
+                for s in syn:
+                    s.k = float(self.orig_gaba_weights[n])
             self.orig_gaba_weights = None
 
     def unify_bps(self, bp_type):
@@ -1080,7 +1029,7 @@ class Runner:
                         self.recs["bps"][n][k][i][s].record(getattr(syn, "_ref_%s" % s))
 
             self.recs["gaba"][n], self.data["gaba"][n] = {}, {}
-            for i, syn in enumerate(self.model.gaba_syns[n]["syn"]):
+            for i, syn in enumerate(self.model.gaba_syns[n]):
                 self.recs["gaba"][n][i] = {"i": h.Vector(), "g": h.Vector()}
                 self.data["gaba"][n][i] = {"i": [], "g": []}
                 self.recs["gaba"][n][i]["i"].record(syn._ref_i)
