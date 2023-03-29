@@ -33,7 +33,10 @@ def distribution_run(
         model = sac_pair.SacPair(sac_params=params, seed=i)
         runner = sac_pair.Runner(model)
         data = runner.velocity_mechanism_run(
-            velocities=velocities, conds=conds, mech_trials=mech_trials, quiet=True,
+            velocities=velocities,
+            conds=conds,
+            mech_trials=mech_trials,
+            quiet=True,
         )
         return data
 
@@ -84,7 +87,10 @@ def incremental_sust_removal_run(
         model = sac_pair.SacPair(sac_params=params)
         runner = sac_pair.Runner(model)
         data = runner.velocity_mechanism_run(
-            velocities=velocities, conds=conds, mech_trials=mech_trials, quiet=True,
+            velocities=velocities,
+            conds=conds,
+            mech_trials=mech_trials,
+            quiet=True,
         )
         return data
 
