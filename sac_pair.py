@@ -158,10 +158,10 @@ class Sac:
                 "delay": 0,
             },
             "trans": {
-                "tau1": 0.1,  # inhibitory conductance rise tau [ms]
-                "tau2": 12,  # inhibitory conductance decay tau [ms]
-                "rev": 0,  # inhibitory reversal potential [mV]
-                "weight": 0.000495,  # weight of inhibitory NetCons [uS]
+                "tau1": 0.1,  # excitatory conductance rise tau [ms]
+                "tau2": 12,  # excitatory conductance decay tau [ms]
+                "rev": 0,  # excitatory reversal potential [mV]
+                "weight": 0.000495,  # weight of excitatory NetCons [uS]
                 "delay": 0,
             },
         }
