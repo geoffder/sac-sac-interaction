@@ -361,8 +361,7 @@ class BiexpFitter:
 
 
 def biexp(x, m, t1, t2, b):
-    return m * (np.exp(-t2 * x) - np.exp(-t1 * x)) + b
-
+    return m * (np.exp(-x / t1) - np.exp(-x / t2)) + b
 
 def make_biexp(n_pts, dt, tau1, tau2):
     x = np.arange(n_pts) * dt
